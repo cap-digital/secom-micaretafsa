@@ -26,15 +26,15 @@ import {
   type EstrategiaParaChecklist,
 } from "./calculos";
 import { localizarMunicipio } from "./municipios";
-import { CRIATIVOS_LOCAIS } from "@/config/campanha";
+import { CRIATIVOS_LOCAIS, MAX_MUNICIPIOS_RAIO, mostrarDemaisLocalidades } from "@/config/campanha";
 import type {
   CriativoPayload,
   DashboardPayload,
   LinhaRecorte,
-  PracaMapa,
   Periodo,
   Preset,
   ResultadoDashboard,
+  ResumoGeo,
 } from "./tipos";
 
 /**
@@ -115,7 +115,15 @@ const ROTULO_IDADE: Record<string, string> = {
   AGE_RANGE_UNDETERMINED: "Não identificado",
 };
 const ORDEM_IDADE = Object.keys(ROTULO_IDADE);
-const TOP_PRACAS = 10;
+
+/** Distância em km entre dois pontos (haversine). */
+function distanciaKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const rad = (g: number) => (g * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLng = rad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(a));
+}
 
 interface EstrategiaCalculada {
   cap: EstrategiaCap;
@@ -396,37 +404,32 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
   const genero = paraLinhas(accGenero, ORDEM_GENERO);
   const idade = paraLinhas(accIdade, ORDEM_IDADE);
 
-  // Praças: une geo_target_constants que são o mesmo município (o Google pode
-  // ter mais de um com o mesmo nome), depois top 10 + "Outras" + "Não identificado"
-  const accMunicipios = new Map<string, Acumulado>();
+  // Praças: municípios (base IBGE) dentro do raio segmentado da campanha, um a um;
+  // o resto (fora do raio, outros países, não identificado) vira "Demais localidades".
+  const raios = calculadas.flatMap((c) => c.recortes?.segmentacao.raios ?? []);
+  const dentroDoRaio = (lat: number, lng: number) =>
+    raios.some((r) => distanciaKm(r.lat, r.lng, lat, lng) <= r.km);
+  const accMunicipios = new Map<string, Acumulado & { dentro: boolean }>();
   for (const [geo, a] of accCidades) {
     const g = geoInfo.get(geo);
     const mun = g ? localizarMunicipio(g.nome, g.canonico) : null;
-    const k = geo === "nao-identificado" ? geo : mun ? `mun:${mun.uf}:${mun.nome}` : g?.canonico ? `geo:${g.canonico}` : geo;
-    const destino = accMunicipios.get(k) ?? { rotulo: a.rotulo, impressoes: 0, cliques: 0, cent: 0 };
-    destino.impressoes += a.impressoes;
-    destino.cliques += a.cliques;
-    destino.cent += a.cent;
-    accMunicipios.set(k, destino);
-    if (!geoInfo.has(k) && g) geoInfo.set(k, g);
+    const dentro = !!mun && (raios.length ? dentroDoRaio(mun.lat, mun.lng) : mun.uf === "BA");
+    const k = dentro && mun ? `mun:${mun.uf}:${mun.nome}` : "demais";
+    const rotulo = dentro && mun ? mun.nome : "Demais localidades";
+    const d = accMunicipios.get(k) ?? { rotulo, impressoes: 0, cliques: 0, cent: 0, dentro };
+    d.impressoes += a.impressoes;
+    d.cliques += a.cliques;
+    d.cent += a.cent;
+    accMunicipios.set(k, d);
   }
-  const cidadesTodas = paraLinhas(accMunicipios);
-  const totalImpCidades = cidadesTodas.reduce((a, l) => a + l.impressoes, 0);
-  const nomeadas = cidadesTodas
-    .filter((l) => l.chave !== "nao-identificado" && l.rotulo)
-    .sort((a, b) => b.impressoes - a.impressoes);
-  const top = nomeadas.slice(0, TOP_PRACAS).map((l) => {
-    const g = geoInfo.get(l.chave);
-    const mun = g ? localizarMunicipio(g.nome, g.canonico) : null;
-    return { ...l, rotulo: mun ? `${mun.nome} · ${mun.uf}` : l.rotulo };
-  });
-  const chavesTop = new Set(top.map((l) => l.chave));
-  const resto = cidadesTodas.filter((l) => !chavesTop.has(l.chave) && l.chave !== "nao-identificado");
-  const naoId = cidadesTodas.find((l) => l.chave === "nao-identificado");
-  const agrupada = (chave: string, rotulo: string, linhas: typeof cidadesTodas) => {
+  const todasPracas = paraLinhas(accMunicipios);
+  const noRaio = todasPracas.filter((l) => l.chave !== "demais").sort((a, b) => b.impressoes - a.impressoes);
+  const demais = todasPracas.find((l) => l.chave === "demais");
+  const somarLinhas = (chave: string, rotulo: string, linhas: typeof todasPracas) => {
     const imp = linhas.reduce((a, l) => a + l.impressoes, 0);
     const cli = linhas.reduce((a, l) => a + l.cliques, 0);
     const cent = linhas.reduce((a, l) => a + l.cent, 0);
+    const totalImp = todasPracas.reduce((a, l) => a + l.impressoes, 0);
     const investido = deCentavos(cent);
     return {
       chave,
@@ -435,30 +438,35 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
       cliques: cli,
       investido,
       cent,
-      pct: totalImpCidades > 0 ? (imp / totalImpCidades) * 100 : 0,
+      pct: totalImp > 0 ? (imp / totalImp) * 100 : 0,
       cpm: imp > 0 ? investido / (imp / 1000) : null,
       ctr: imp > 0 ? (cli / imp) * 100 : null,
     };
   };
-  const ranking = [...top];
-  if (resto.length) ranking.push(agrupada("outras", `Outras (${resto.length})`, resto));
-  if (naoId) ranking.push({ ...naoId, rotulo: "Não identificado" });
+  const pracasCompletas = noRaio.length > MAX_MUNICIPIOS_RAIO
+    ? [
+        ...noRaio.slice(0, MAX_MUNICIPIOS_RAIO - 1),
+        somarLinhas("outros-raio", `Outros ${noRaio.length - (MAX_MUNICIPIOS_RAIO - 1)} municípios do raio`, noRaio.slice(MAX_MUNICIPIOS_RAIO - 1)),
+      ]
+    : [...noRaio];
+  if (demais) pracasCompletas.push(demais);
+  const pracasVisiveis = mostrarDemaisLocalidades ? pracasCompletas : pracasCompletas.filter((l) => l.chave !== "demais");
 
-  const mapa: PracaMapa[] = [];
-  for (const l of nomeadas) {
-    const g = geoInfo.get(l.chave);
-    const mun = g ? localizarMunicipio(g.nome, g.canonico) : null;
-    if (mun)
-      mapa.push({
-        chave: l.chave,
-        nome: mun.nome,
-        uf: mun.uf,
-        lat: mun.lat,
-        lng: mun.lng,
-        impressoes: l.impressoes,
-        pct: l.pct,
-      });
-  }
+  const seg = calculadas.find((c) => c.recortes)?.recortes?.segmentacao ?? null;
+  const resumoGeo: ResumoGeo | null = seg
+    ? {
+        tipoGeo: seg.tipoGeo,
+        locais: calculadas.flatMap((c) =>
+          (c.recortes?.segmentacao.locais ?? []).map((l, i) => ({
+            chave: `${c.cap.id}:${i}`,
+            rotulo: l.rotulo,
+            ativo: l.ativo,
+            impressoes: l.impressoes,
+            cliques: l.cliques,
+          })),
+        ),
+      }
+    : null;
 
   const criativos: CriativoPayload[] = [...accCriativos.entries()].map(([, a], i) => {
     const formato = a.info.largura && a.info.altura ? `${a.info.largura}x${a.info.altura}` : "—";
@@ -525,7 +533,7 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
     },
     serie,
     publico: { genero: genero.map(semCent), idade: idade.map(semCent) },
-    pracas: { ranking: ranking.map(semCent), mapa },
+    pracas: { linhas: pracasVisiveis.map(semCent), resumo: resumoGeo },
     criativos,
   };
 
@@ -546,7 +554,8 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
     ["criativos", somaCent([...accCriativos.values()].map((a) => a.cent)), esperado.criativos],
     ["gênero", somaCent(genero.map((l) => l.cent)), esperado.genero],
     ["idade", somaCent(idade.map((l) => l.cent)), esperado.idade],
-    ["praças", somaCent(ranking.map((l) => l.cent)), esperado.cidades],
+    // fechamento sobre a lista completa (inclui "Demais localidades" mesmo se oculta na tela)
+    ["praças", somaCent(pracasCompletas.map((l) => l.cent)), esperado.cidades],
   ];
   for (const [nome, soma, esp] of fechamentos)
     if (soma !== esp) erros.push(`[1] recorte ${nome}: soma (${soma}) ≠ investido do intervalo (${esp})`);
@@ -571,6 +580,6 @@ export function totaisRecortes(p: DashboardPayload) {
     criativos: c(p.criativos),
     genero: c(p.publico.genero),
     idade: c(p.publico.idade),
-    pracas: c(p.pracas.ranking),
+    pracas: c(p.pracas.linhas),
   };
 }

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { carregarDashboard } from "@/lib/dashboard";
-import { Topbar } from "@/components/Topbar";
 import { Criativos } from "@/components/Criativos";
 import { Carregando, EstadoVazio } from "@/components/EstadoVazio";
 
@@ -12,14 +11,7 @@ const um = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default function Page({ searchParams }: { searchParams: Busca }) {
   return (
-    <Suspense
-      fallback={
-        <>
-          <Topbar />
-          <Carregando />
-        </>
-      }
-    >
+    <Suspense fallback={<Carregando />}>
       <PaginaCriativos searchParams={searchParams} />
     </Suspense>
   );
@@ -28,27 +20,13 @@ export default function Page({ searchParams }: { searchParams: Busca }) {
 async function PaginaCriativos({ searchParams }: { searchParams: Busca }) {
   const sp = await searchParams;
   const r = await carregarDashboard({ de: um(sp.de), ate: um(sp.ate) });
-  if (r.estado === "vazio") {
-    return (
-      <>
-        <Topbar />
-        <EstadoVazio titulo={r.titulo} mensagem={r.mensagem} />
-      </>
-    );
-  }
+  if (r.estado === "vazio") return <EstadoVazio titulo={r.titulo} mensagem={r.mensagem} />;
   const d = r.payload;
 
   return (
-    <>
-      <Topbar periodo={d.periodo} atualizadoHora={d.atualizadoHora} status={d.projeto.status} />
-      <main className="mx-auto flex w-full max-w-[1680px] min-h-0 flex-1 flex-col gap-3 p-4 lg:px-6">
-        {r.aviso && <p className="shrink-0 rounded-lg bg-magenta-suave px-3 py-1.5 text-xs text-texto">{r.aviso}</p>}
-        {d.criativos.length ? (
-          <Criativos criativos={d.criativos} />
-        ) : (
-          <EstadoVazio titulo="Sem veiculação no período" mensagem="Escolha outro intervalo de datas na barra superior." />
-        )}
-      </main>
-    </>
+    <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-3 p-4 lg:px-6 lg:py-3">
+      {r.aviso && <p className="shrink-0 rounded-lg bg-amarelo-suave px-3 py-1.5 text-xs text-texto">{r.aviso}</p>}
+      <Criativos criativos={d.criativos} periodo={d.periodo} />
+    </main>
   );
 }

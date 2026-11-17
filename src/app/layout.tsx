@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Header } from "@/components/Header";
 import "./globals.css";
 
 const corpo = Inter({ variable: "--font-corpo", subsets: ["latin"] });
@@ -13,7 +14,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="pt-BR" className={`${corpo.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col text-[13px] lg:h-dvh lg:overflow-hidden">{children}</body>
+      <body className="flex min-h-full flex-col text-[13px]">
+        <Header />
+        {children}
+      </body>
     </html>
   );
 }

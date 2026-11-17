@@ -14,7 +14,7 @@ const METRICAS: { id: Metrica; rotulo: string }[] = [
   { id: "cliques", rotulo: "Cliques" },
 ];
 
-const ROXO = "#b70097";
+const AZUL = "#2f6db5"; // azul royal da Micareta
 const GRADE = "#efeff2";
 const EIXO = "#8e8e99";
 
@@ -57,7 +57,7 @@ function Tabela({ serie }: { serie: DiaSerie[] }) {
   });
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <table className="num w-full text-left text-xs">
+      <table className="num w-full min-w-[560px] text-left text-xs">
         <thead className="sticky top-0 bg-white text-[11px] text-texto-3">
           <tr className="border-b border-borda">
             <th className="py-1.5 font-medium">Dia</th>
@@ -119,7 +119,7 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
             onClick={() => setTabela((t) => !t)}
             aria-pressed={tabela}
             className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-              tabela ? "border-roxo bg-roxo text-white" : "border-borda bg-white text-texto-2 hover:text-texto"
+              tabela ? "border-azul bg-azul text-white" : "border-borda bg-white text-texto-2 hover:text-texto"
             }`}
           >
             {tabela ? "Gráfico" : "Tabela"}
@@ -130,7 +130,7 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
       {tabela ? (
         <Tabela serie={serie} />
       ) : (
-        <div className="relative h-56 min-h-0 lg:h-auto lg:flex-1">
+        <div className="relative h-64 min-h-0 lg:h-auto lg:min-h-40 lg:flex-1">
           <div className="absolute inset-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dados} margin={{ top: 20, right: 8, bottom: 0, left: 0 }} barCategoryGap="22%">
@@ -151,26 +151,28 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
                   axisLine={false}
                   tickFormatter={(v: number) => fmtCompacto(v)}
                 />
-                <Tooltip content={<Dica metrica={metrica} />} cursor={{ fill: "rgba(183,0,151,0.05)" }} />
-                <Bar dataKey={metrica} fill={ROXO} radius={[4, 4, 0, 0]} maxBarSize={56} isAnimationActive={false}>
+                <Tooltip content={<Dica metrica={metrica} />} cursor={{ fill: "rgba(47,109,181,0.06)" }} />
+                <Bar dataKey={metrica} fill={AZUL} radius={[4, 4, 0, 0]} maxBarSize={56} isAnimationActive={false}>
                   {!muitosDias && (
                     <LabelList
                       dataKey={metrica}
                       content={(props) => {
                         const { x, y, width, value } = props as { x?: number; y?: number; width?: number; value?: unknown };
                         if (typeof value !== "number" || x === undefined || y === undefined || width === undefined) return null;
-                        if (width < 44) return null; // barra estreita: o valor fica no tooltip/tabela
+                        if (width < 18) return null; // barra estreitíssima: valor no tooltip/tabela
+                        const largo = width >= 44;
+                        const texto = largo ? formatarCurto(metrica, value) : fmtCompacto(value);
                         return (
                           <text
                             x={x + width / 2}
                             y={y - 6}
                             textAnchor="middle"
-                            fontSize={11}
+                            fontSize={largo ? 11 : 10}
                             fontWeight={500}
                             fill="#5f5f6b"
                             style={{ fontVariantNumeric: "tabular-nums" }}
                           >
-                            {formatarCurto(metrica, value)}
+                            {texto}
                           </text>
                         );
                       }}

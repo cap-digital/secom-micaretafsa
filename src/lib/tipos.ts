@@ -39,14 +39,11 @@ export interface LinhaRecorte {
   ctr: number | null;
 }
 
-export interface PracaMapa {
-  chave: string;
-  nome: string;
-  uf: string;
-  lat: number;
-  lng: number;
-  impressoes: number;
-  pct: number;
+/** Resumo da área segmentada (aba "Locais" do Google): só entregas, sem dinheiro. */
+export interface ResumoGeo {
+  /** PRESENCE_OR_INTEREST | PRESENCE */
+  tipoGeo: string | null;
+  locais: { chave: string; rotulo: string; ativo: boolean; impressoes: number; cliques: number }[];
 }
 
 export interface CriativoPayload {
@@ -111,7 +108,7 @@ export interface DashboardPayload {
   /** dias do intervalo filtrado */
   serie: DiaSerie[];
   publico: { genero: LinhaRecorte[]; idade: LinhaRecorte[] };
-  pracas: { ranking: LinhaRecorte[]; mapa: PracaMapa[] };
+  pracas: { linhas: LinhaRecorte[]; resumo: ResumoGeo | null };
   criativos: CriativoPayload[];
 }
 

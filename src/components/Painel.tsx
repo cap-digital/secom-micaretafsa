@@ -53,7 +53,7 @@ export function Segmentado<T extends string>({
           aria-pressed={valor === o.id}
           onClick={() => onChange(o.id)}
           className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-            valor === o.id ? "bg-white text-roxo shadow-sm" : "text-texto-2 hover:text-texto"
+            valor === o.id ? "bg-white text-azul shadow-sm" : "text-texto-2 hover:text-texto"
           }`}
         >
           {o.rotulo}

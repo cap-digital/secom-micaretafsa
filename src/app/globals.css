@@ -1,29 +1,32 @@
 @import "tailwindcss";
 
 /*
- * Base neutra (cinza claro + cards brancos). Cores da Micareta (extraídas dos
- * criativos) só como acento:
- *  roxo #b70097 (barras, botões ativos) · magenta #db1899 (secundária)
- *  amarelo-limão #d4f104 (somente badges)
- * Pares categóricos validados (CVD/contraste): #930c80 + #e2559f.
+ * Identidade Micareta de Feira 2026 (paleta extraída dos prints oficiais):
+ *  azul royal #2F6DB5 (principal dos dados: barras, linhas, aba ativa)
+ *  laranja #E0702A (secundária) · laranja-escuro #C85A1E (detalhes)
+ *  amarelo-ouro #F0C848 (só badges e destaques) · azul-céu #47AAE5
+ *  degradê do header #E8B141 → #E58038 (fundo do print)
+ * Par categórico validado (CVD + contraste, texto branco ≥ 4,2:1): #2F6DB5 + #C85A1E.
  */
 :root {
-  --fundo: #f4f4f6;
+  --fundo: #f4f5f7;
   --card: #ffffff;
-  --borda: #e6e6ea;
-  --borda-forte: #d6d6dc;
+  --borda: #e5e7eb;
+  --trilho: #e8eaee;
   --texto: #18181b;
-  --texto-2: #5f5f6b;
-  --texto-3: #8e8e99;
-  --roxo: #b70097;
-  --roxo-cat: #930c80;
-  --roxo-suave: #f7e6f4;
-  --magenta: #db1899;
-  --magenta-cat: #e2559f;
-  --magenta-suave: #fde8f3;
-  --limao: #d4f104;
-  --limao-suave: #f3fbc4;
-  --neutro: #d4d4d8;
+  --texto-2: #5b5f6b;
+  --texto-3: #8b8f9a;
+  --azul: #2f6db5;
+  --azul-suave: #e8f0fa;
+  --azul-ceu: #47aae5;
+  --laranja: #e0702a;
+  --laranja-escuro: #c85a1e;
+  --laranja-suave: #fdeee4;
+  --amarelo: #f0c848;
+  --amarelo-suave: #fdf4d6;
+  --neutro: #d4d6db;
+  --degrade-topo: #e8b141;
+  --degrade-base: #e58038;
   color-scheme: light;
 }
 
@@ -31,18 +34,18 @@
   --color-fundo: var(--fundo);
   --color-card: var(--card);
   --color-borda: var(--borda);
-  --color-borda-forte: var(--borda-forte);
+  --color-trilho: var(--trilho);
   --color-texto: var(--texto);
   --color-texto-2: var(--texto-2);
   --color-texto-3: var(--texto-3);
-  --color-roxo: var(--roxo);
-  --color-roxo-cat: var(--roxo-cat);
-  --color-roxo-suave: var(--roxo-suave);
-  --color-magenta: var(--magenta);
-  --color-magenta-cat: var(--magenta-cat);
-  --color-magenta-suave: var(--magenta-suave);
-  --color-limao: var(--limao);
-  --color-limao-suave: var(--limao-suave);
+  --color-azul: var(--azul);
+  --color-azul-suave: var(--azul-suave);
+  --color-azul-ceu: var(--azul-ceu);
+  --color-laranja: var(--laranja);
+  --color-laranja-escuro: var(--laranja-escuro);
+  --color-laranja-suave: var(--laranja-suave);
+  --color-amarelo: var(--amarelo);
+  --color-amarelo-suave: var(--amarelo-suave);
   --color-neutro: var(--neutro);
   --font-sans: var(--font-corpo);
 }
@@ -65,20 +68,20 @@ body {
 .rotulo {
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   color: var(--texto-2);
 }
 
-/* leaflet: tooltip no estilo dos cards */
-.leaflet-tooltip.tooltip-praca {
-  border: 1px solid var(--borda);
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.08);
-  font-family: var(--font-corpo), system-ui, sans-serif;
-  font-size: 12px;
-  padding: 6px 8px;
+/* faixa do header: degradê do print + textura leve de pontos */
+.faixa-micareta {
+  background: linear-gradient(180deg, var(--degrade-topo) 0%, var(--degrade-base) 100%);
 }
-.leaflet-container {
-  background: #f2f2f0;
-  font-family: var(--font-corpo), system-ui, sans-serif;
+.faixa-micareta-textura {
+  background-image:
+    radial-gradient(rgb(255 255 255 / 0.22) 1.3px, transparent 1.5px),
+    radial-gradient(rgb(255 255 255 / 0.12) 1px, transparent 1.2px);
+  background-size: 22px 22px, 22px 22px;
+  background-position: 0 0, 11px 11px;
+  /* a textura some atrás do logo, que tem o fundo liso do print */
+  mask-image: linear-gradient(90deg, transparent 0, transparent 220px, #000 380px);
 }

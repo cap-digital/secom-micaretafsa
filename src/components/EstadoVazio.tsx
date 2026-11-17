@@ -2,7 +2,7 @@ export function EstadoVazio({ titulo, mensagem }: { titulo: string; mensagem: st
   return (
     <div className="flex flex-1 items-center justify-center p-6">
       <div className="max-w-sm rounded-xl border border-borda bg-card p-8 text-center">
-        <div className="mx-auto mb-4 h-1 w-16 rounded-full bg-gradient-to-r from-roxo to-magenta" />
+        <div className="mx-auto mb-4 h-1 w-16 rounded-full bg-gradient-to-r from-amarelo via-laranja to-azul" />
         <h1 className="text-[15px] font-semibold text-texto">{titulo}</h1>
         <p className="mt-1.5 text-xs text-texto-2">{mensagem}</p>
         <p className="mt-4 text-[11px] text-texto-3">Micareta de Feira 2026 · Governo da Bahia</p>

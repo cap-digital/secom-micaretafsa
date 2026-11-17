@@ -114,8 +114,34 @@ export interface LinhaSegmento extends MetricasLinha {
 export interface CidadeGoogle extends MetricasLinha {
   /** resource name do geo_target_constant (null = não identificado) */
   geo: string | null;
+  /** criterion id do país (2076 = Brasil) */
+  pais: string | null;
   nome: string | null;
   canonico: string | null;
+}
+
+/** Critério de localização da campanha (aba "Locais"), com entrega do location_view. */
+export interface LocalSegmentado {
+  id: string;
+  tipo: "PROXIMITY" | "LOCATION" | string;
+  rotulo: string;
+  ativo: boolean;
+  impressoes: number;
+  cliques: number;
+}
+
+export interface Raio {
+  lat: number;
+  lng: number;
+  km: number;
+  endereco: string | null;
+}
+
+export interface SegmentacaoGeo {
+  /** PRESENCE_OR_INTEREST | PRESENCE | ... */
+  tipoGeo: string | null;
+  raios: Raio[];
+  locais: LocalSegmentado[];
 }
 
 export interface DiarioGoogle {
@@ -128,6 +154,7 @@ export interface RecortesGoogle {
   genero: LinhaSegmento[];
   idade: LinhaSegmento[];
   cidades: CidadeGoogle[];
+  segmentacao: SegmentacaoGeo;
   buscadoEm: string;
 }
 
@@ -145,6 +172,8 @@ const somar = (a: MetricasLinha, b: MetricasLinha) => {
   a.cliques += b.cliques;
   a.custo += b.custo;
 };
+
+const fmtKm = (km: number) => (Number.isInteger(km) ? String(km) : km.toFixed(1).replace(".", ","));
 
 function dimensoesDoNome(nome: string): { w: number; h: number } | null {
   const m = nome.match(/(\d{2,4})\s*x\s*(\d{2,4})/i);
@@ -201,8 +230,9 @@ export async function buscarGoogleDiario(
 // Recortes — intervalo filtrado (criativos, gênero, idade, cidades)
 // ---------------------------------------------------------------------------
 
-/** Quantas cidades (por impressões) têm o nome resolvido no geo_target_constant. */
-const CIDADES_RESOLVIDAS = 60;
+const BRASIL = "2076";
+/** geo_target_constant por consulta (IN) ao resolver nomes. */
+const LOTE_GEO = 300;
 
 export async function buscarGoogleRecortes(
   customerId: string,
@@ -214,9 +244,10 @@ export async function buscarGoogleRecortes(
   cacheLife({ stale: 60, revalidate: 120, expire: 300 });
 
   const env = envObrigatorio();
-  const { where } = filtros(campaignIds, desde, ate);
+  const { ids, where } = filtros(campaignIds, desde, ate);
+  const soCampanha = `campaign.id IN (${ids.join(",")})`;
 
-  const [linhasAd, linhasGenero, linhasIdade, linhasLocal] = await Promise.all([
+  const [linhasAd, linhasGenero, linhasIdade, linhasLocal, linhasConfig, linhasCriterios, linhasLocais] = await Promise.all([
     gaql(
       env,
       customerId,
@@ -242,8 +273,32 @@ export async function buscarGoogleRecortes(
     gaql(
       env,
       customerId,
-      `SELECT campaign.id, segments.geo_target_city, metrics.impressions, metrics.clicks, metrics.cost_micros
+      `SELECT campaign.id, user_location_view.country_criterion_id, segments.geo_target_city,
+              metrics.impressions, metrics.clicks, metrics.cost_micros
        FROM user_location_view WHERE ${where}`,
+    ).catch(() => []),
+    gaql(
+      env,
+      customerId,
+      `SELECT campaign.geo_target_type_setting.positive_geo_target_type FROM campaign WHERE ${soCampanha}`,
+    ).catch(() => []),
+    gaql(
+      env,
+      customerId,
+      `SELECT campaign_criterion.criterion_id, campaign_criterion.type, campaign_criterion.negative,
+              campaign_criterion.proximity.radius, campaign_criterion.proximity.radius_units,
+              campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
+              campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
+              campaign_criterion.proximity.address.street_address, campaign_criterion.proximity.address.city_name,
+              campaign_criterion.location.geo_target_constant
+       FROM campaign_criterion
+       WHERE ${soCampanha} AND campaign_criterion.type IN (LOCATION, PROXIMITY) AND campaign_criterion.status != REMOVED`,
+    ).catch(() => []),
+    gaql(
+      env,
+      customerId,
+      `SELECT campaign_criterion.criterion_id, campaign_criterion.type, metrics.impressions, metrics.clicks
+       FROM location_view WHERE ${where}`,
     ).catch(() => []),
   ]);
 
@@ -265,34 +320,97 @@ export async function buscarGoogleRecortes(
   const porCidade = new Map<string, CidadeGoogle>();
   for (const r of linhasLocal) {
     const geo = (r.segments?.geoTargetCity as string | undefined) ?? null;
+    const pais = r.userLocationView?.countryCriterionId ? String(r.userLocationView.countryCriterionId) : null;
     const k = geo ?? "—";
-    const c = porCidade.get(k) ?? { geo, nome: null, canonico: null, impressoes: 0, cliques: 0, custo: 0 };
+    const c = porCidade.get(k) ?? { geo, pais, nome: null, canonico: null, impressoes: 0, cliques: 0, custo: 0 };
     somar(c, metricas(r));
     porCidade.set(k, c);
   }
   const cidades = [...porCidade.values()].sort((a, b) => b.impressoes - a.impressoes);
-  const aResolver = cidades.filter((c) => c.geo).slice(0, CIDADES_RESOLVIDAS);
-  if (aResolver.length) {
+  // --- Critérios de localização (raio / locais) e tipo de segmentação geográfica ---
+  const tipoGeo: string | null =
+    linhasConfig[0]?.campaign?.geoTargetTypeSetting?.positiveGeoTargetType ?? null;
+  const raios: Raio[] = [];
+  const ativos = new Map<string, { tipo: string; rotulo: string | null; geo: string | null }>();
+  for (const r of linhasCriterios) {
+    const cc = r.campaignCriterion ?? {};
+    if (cc.negative) continue;
+    const id = String(cc.criterionId);
+    if (cc.type === "PROXIMITY" && cc.proximity) {
+      const px = cc.proximity;
+      const km = n(px.radius) * (px.radiusUnits === "MILES" ? 1.609344 : 1);
+      const endereco = px.address?.streetAddress || px.address?.cityName || null;
+      raios.push({
+        lat: n(px.geoPoint?.latitudeInMicroDegrees) / 1e6,
+        lng: n(px.geoPoint?.longitudeInMicroDegrees) / 1e6,
+        km,
+        endereco,
+      });
+      ativos.set(id, { tipo: "PROXIMITY", rotulo: `Raio de ${fmtKm(km)} km${endereco ? ` · ${endereco}` : ""}`, geo: null });
+    } else if (cc.type === "LOCATION") {
+      ativos.set(id, { tipo: "LOCATION", rotulo: null, geo: cc.location?.geoTargetConstant ?? `geoTargetConstants/${id}` });
+    }
+  }
+  const locaisMap = new Map<string, LocalSegmentado>();
+  for (const r of linhasLocais) {
+    const cc = r.campaignCriterion ?? {};
+    const id = String(cc.criterionId);
+    const l = locaisMap.get(id) ?? {
+      id,
+      tipo: String(cc.type ?? ""),
+      rotulo: ativos.get(id)?.rotulo ?? "",
+      ativo: ativos.has(id),
+      impressoes: 0,
+      cliques: 0,
+    };
+    l.impressoes += n(r.metrics?.impressions);
+    l.cliques += n(r.metrics?.clicks);
+    locaisMap.set(id, l);
+  }
+  for (const [id, a] of ativos)
+    if (!locaisMap.has(id)) locaisMap.set(id, { id, tipo: a.tipo, rotulo: a.rotulo ?? "", ativo: true, impressoes: 0, cliques: 0 });
+
+  // --- Nomes: todas as cidades do Brasil + critérios LOCATION (lotes) ---
+  const geosLocais = [...locaisMap.values()]
+    .filter((l) => l.tipo === "LOCATION")
+    .map((l) => ativos.get(l.id)?.geo ?? `geoTargetConstants/${l.id}`);
+  const aResolver = [
+    ...new Set([...cidades.filter((c) => c.geo && c.pais === BRASIL).map((c) => c.geo!), ...geosLocais]),
+  ];
+  const info = new Map<string, { name?: string; canonicalName?: string }>();
+  for (let i = 0; i < aResolver.length; i += LOTE_GEO) {
+    const lote = aResolver.slice(i, i + LOTE_GEO);
     try {
       const geos = await gaql(
         env,
         customerId,
         `SELECT geo_target_constant.resource_name, geo_target_constant.name, geo_target_constant.canonical_name
          FROM geo_target_constant
-         WHERE geo_target_constant.resource_name IN (${aResolver.map((c) => `'${c.geo}'`).join(",")})`,
+         WHERE geo_target_constant.resource_name IN (${lote.map((g) => `'${g}'`).join(",")})`,
       );
-      const info = new Map(geos.map((g) => [g.geoTargetConstant?.resourceName, g.geoTargetConstant]));
-      for (const c of aResolver) {
-        const g = info.get(c.geo);
-        if (g) {
-          c.nome = g.name ?? null;
-          c.canonico = g.canonicalName ?? null;
-        }
-      }
+      for (const g of geos) info.set(g.geoTargetConstant?.resourceName, g.geoTargetConstant);
     } catch {
-      /* sem nomes: ranking mostra só "Outras"/"Não identificado" */
+      /* lote sem nome: cidades entram em "Demais localidades" */
     }
   }
+  for (const c of cidades) {
+    const g = c.geo ? info.get(c.geo) : undefined;
+    if (g) {
+      c.nome = g.name ?? null;
+      c.canonico = g.canonicalName ?? null;
+    }
+  }
+  for (const l of locaisMap.values()) {
+    if (l.tipo !== "LOCATION") continue;
+    const g = info.get(ativos.get(l.id)?.geo ?? `geoTargetConstants/${l.id}`);
+    l.rotulo = g?.canonicalName ?? g?.name ?? `Local ${l.id}`;
+  }
+  for (const l of locaisMap.values()) if (!l.rotulo) l.rotulo = l.tipo === "PROXIMITY" ? "Raio" : `Local ${l.id}`;
+  const segmentacao: SegmentacaoGeo = {
+    tipoGeo,
+    raios,
+    locais: [...locaisMap.values()].sort((a, b) => Number(b.ativo) - Number(a.ativo) || b.impressoes - a.impressoes),
+  };
 
   // --- Anúncios (+ assets dos responsivos) ---
   const assetsPorAd = new Map<string, string[]>();
@@ -374,6 +492,7 @@ export async function buscarGoogleRecortes(
     genero,
     idade,
     cidades,
+    segmentacao,
     buscadoEm: new Date().toISOString(),
   };
 }

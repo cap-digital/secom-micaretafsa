@@ -10,18 +10,18 @@ export function BarraProgresso({
   pctIdeal,
   cor,
   rotulo,
-  altura = 12,
+  altura = "clamp(8px, 1.1vh, 14px)",
 }: {
   pct: number | null;
   pctIdeal?: number | null;
   cor: string;
   rotulo: string;
-  altura?: number;
+  altura?: number | string;
 }) {
   const w = Math.min(100, Math.max(0, pct ?? 0));
   const ideal = pctIdeal === null || pctIdeal === undefined ? null : Math.min(100, Math.max(0, pctIdeal));
   return (
-    <div className="relative py-1">
+    <div className="relative py-[3px]">
       <div
         className="w-full overflow-hidden rounded-full"
         style={{ height: altura, background: COR.trilho }}

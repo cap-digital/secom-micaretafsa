@@ -4,43 +4,47 @@ import { fmtBRL, fmtCompacto, fmtPct } from "@/lib/formato";
 import { Painel } from "./Painel";
 
 /**
- * Barras horizontais por faixa etária. Largura e cor inline (hex). A barra usa a
- * coluna inteira e o rótulo "impressões · %" fica logo abaixo dela.
+ * Barras horizontais por faixa etária num ÚNICO grid: todas as linhas usam as
+ * mesmas colunas (faixa | barra | rótulo de dados | CPM bruto) e dividem a altura
+ * do card (linhas em 1fr). Largura e cor das barras inline (hex).
  */
 export function Idade({ linhas }: { linhas: LinhaRecorte[] }) {
   const max = Math.max(1, ...linhas.map((l) => l.impressoes));
-  const colunas = "grid-cols-[minmax(0,92px)_minmax(0,1fr)_64px]";
   return (
-    <Painel titulo="Idade" subtitulo="impressões da campanha até hoje" className="h-full">
+    <Painel titulo="Idade" className="h-full">
       {!linhas.length ? (
         <p className="m-auto text-xs text-texto-3">Aguardando dados</p>
       ) : (
-        <div className="flex flex-1 flex-col justify-between gap-2">
-          <div className={`grid ${colunas} gap-x-3`}>
-            <span className="rotulo">Faixa</span>
-            <span className="rotulo">Impressões · %</span>
-            <span className="rotulo text-right">CPM bruto</span>
-          </div>
+        <div
+          className="num fs-mini grid min-h-0 flex-1 items-center gap-x-[clamp(0.4rem,0.6vw,0.9rem)]"
+          style={{
+            gridTemplateColumns: "auto minmax(0, 1fr) auto auto",
+            gridTemplateRows: `auto repeat(${linhas.length}, minmax(1.5rem, 1fr))`,
+          }}
+        >
+          <span className="rotulo pb-1">Faixa</span>
+          <span className="rotulo pb-1">Impressões</span>
+          <span className="rotulo pb-1 text-right">Impr. · %</span>
+          <span className="rotulo pb-1 text-right">CPM</span>
           {linhas.map((l) => {
             const nd = l.chave === "AGE_RANGE_UNDETERMINED";
-            return (
-              <div key={l.chave} className={`num grid ${colunas} items-center gap-x-3 text-xs`}>
-                <span className={`leading-tight ${nd ? "text-texto-3" : "font-semibold text-texto"}`}>{l.rotulo}</span>
-                {/* barra na largura toda da coluna; rótulo de dados logo abaixo (nunca disputa espaço) */}
-                <span className="flex min-w-0 flex-col gap-1">
-                  <span className="block h-3 w-full">
-                    <span
-                      className="barra-anim block h-full rounded-full"
-                      style={{ width: `${Math.max(1.5, (l.impressoes / max) * 100)}%`, background: nd ? COR.neutro : COR.azul }}
-                    />
-                  </span>
-                  <span className="whitespace-nowrap text-[11px] text-texto">
-                    {fmtCompacto(l.impressoes)} · <span className="text-texto-2">{fmtPct(l.pct)}</span>
-                  </span>
-                </span>
-                <span className="text-right text-texto-2">{fmtBRL(l.cpm)}</span>
-              </div>
-            );
+            return [
+              <span key={`${l.chave}-f`} className={`whitespace-nowrap ${nd ? "text-texto-3" : "font-semibold text-texto"}`}>
+                {l.rotulo}
+              </span>,
+              <span key={`${l.chave}-b`} className="block h-[clamp(8px,1.2vh,16px)] min-w-0">
+                <span
+                  className="barra-anim block h-full rounded-full"
+                  style={{ width: `${Math.max(1.5, (l.impressoes / max) * 100)}%`, background: nd ? COR.neutro : COR.azul }}
+                />
+              </span>,
+              <span key={`${l.chave}-r`} className="whitespace-nowrap text-right text-texto">
+                {fmtCompacto(l.impressoes)} · <span className="text-texto-2">{fmtPct(l.pct)}</span>
+              </span>,
+              <span key={`${l.chave}-c`} className="whitespace-nowrap text-right text-texto-2">
+                {fmtBRL(l.cpm)}
+              </span>,
+            ];
           })}
         </div>
       )}

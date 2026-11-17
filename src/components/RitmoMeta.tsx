@@ -33,10 +33,9 @@ export function RitmoMeta({ ritmo }: { ritmo: PontoRitmo[] }) {
   return (
     <Painel
       titulo="Ritmo em relação à meta"
-      subtitulo="impressões acumuladas × meta esperada por dia (contrato)"
       className="h-full"
       acoes={
-        <div className="flex items-center gap-3 text-[11px] text-texto-2">
+        <div className="fs-mini flex flex-wrap items-center gap-x-3 gap-y-1 text-texto-2">
           <span className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COR.azul }} /> Acumulado
           </span>
@@ -49,7 +48,7 @@ export function RitmoMeta({ ritmo }: { ritmo: PontoRitmo[] }) {
         </div>
       }
     >
-      <div className="relative h-60 min-h-0 lg:h-auto lg:min-h-56 lg:flex-1">
+      <div className="relative min-h-[220px] flex-1 lg:min-h-0">
         <div className="absolute inset-0">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={dados} margin={{ top: 22, right: 14, bottom: 0, left: 0 }}>
@@ -68,7 +67,7 @@ export function RitmoMeta({ ritmo }: { ritmo: PontoRitmo[] }) {
                 interval="preserveStartEnd"
                 padding={{ left: 28, right: 12 }}
               />
-              <YAxis width={56} tick={{ fill: COR.eixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtCompacto(v)} />
+              <YAxis width={68} tick={{ fill: COR.eixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtCompacto(v)} />
               <Tooltip content={<Dica />} cursor={{ stroke: COR.eixo, strokeDasharray: "3 3" }} />
               <Line
                 type="linear"
@@ -99,6 +98,7 @@ export function RitmoMeta({ ritmo }: { ritmo: PontoRitmo[] }) {
                     const ultimo = index === ultimoReal;
                     return (
                       <text
+ className="txt-grafico num"
                         x={Number(x) + (ultimo ? 0 : 7)}
                         y={Number(y) + (ultimo ? -10 : 16)}
                         textAnchor={ultimo ? "middle" : "start"}

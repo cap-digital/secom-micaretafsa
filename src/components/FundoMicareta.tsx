@@ -1,6 +1,8 @@
+import { DEGRADE } from "@/lib/cores";
+
 /**
  * Fundo fixo da página: degradê quente (amarelo-ouro → laranja → laranja-queimado),
- * raios de sol e confetes em baixa opacidade. `position: fixed` para não repetir no scroll.
+ * raios de sol sutis e confetes em baixa opacidade. Cores inline (não dependem de CSS).
  * Posições dos confetes são fixas (determinísticas) — nada de Math.random no render.
  */
 const CONFETES: { x: number; y: number; r: number; w: number; h: number; c: string }[] = [
@@ -23,8 +25,12 @@ const CONFETES: { x: number; y: number; r: number; w: number; h: number; c: stri
 
 export function FundoMicareta() {
   return (
-    <div aria-hidden className="fundo-micareta pointer-events-none fixed inset-0 -z-10">
-      <svg className="absolute inset-0 h-full w-full opacity-35" preserveAspectRatio="none">
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 -z-10"
+      style={{ background: `${DEGRADE.brilho}, ${DEGRADE.raios}, ${DEGRADE.fundo}` }}
+    >
+      <svg className="absolute inset-0 h-full w-full opacity-30" preserveAspectRatio="none">
         {CONFETES.map((c, i) => (
           <rect
             key={i}
@@ -37,16 +43,6 @@ export function FundoMicareta() {
             transform={`rotate(${c.r})`}
             style={{ transformBox: "fill-box", transformOrigin: "center" }}
           />
-        ))}
-        {[
-          [18, 8],
-          [44, 70],
-          [68, 40],
-          [88, 12],
-          [27, 50],
-          [76, 92],
-        ].map(([x, y], i) => (
-          <circle key={`c${i}`} cx={`${x}%`} cy={`${y}%`} r={3.5} fill="#ffffff" />
         ))}
       </svg>
     </div>

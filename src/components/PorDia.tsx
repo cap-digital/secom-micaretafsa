@@ -105,7 +105,7 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
   return (
     <Painel
       titulo="Por dia"
-      subtitulo={aguardando ? "Aguardando dados da plataforma" : "valores em bruto"}
+      subtitulo={aguardando ? "Aguardando dados da plataforma" : undefined}
       className="h-full"
       acoes={
         <>
@@ -114,9 +114,8 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
             type="button"
             onClick={() => setTabela((t) => !t)}
             aria-pressed={tabela}
-            className={`rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition-colors ${
-              tabela ? "bg-azul text-white ring-azul" : "bg-white text-texto-2 ring-black/5 hover:text-texto"
-            }`}
+            className="fs-mini rounded-full px-[clamp(0.5rem,0.7vw,0.9rem)] py-[clamp(0.15rem,0.35vh,0.35rem)] font-semibold ring-1 ring-black/5 transition-colors"
+            style={tabela ? { background: COR.azul, color: "#FFFFFF" } : { background: "#FFFFFF", color: COR.texto2 }}
           >
             {tabela ? "Gráfico" : "Tabela"}
           </button>
@@ -126,7 +125,7 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
       {tabela ? (
         <Tabela serie={serie} />
       ) : (
-        <div className="relative h-64 min-h-0 lg:h-auto lg:min-h-64 lg:flex-1">
+        <div className="relative min-h-[220px] flex-1 lg:min-h-0">
           <div className="absolute inset-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dados} margin={{ top: 20, right: 8, bottom: 0, left: 0 }} barCategoryGap="22%">
@@ -140,7 +139,7 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
                   interval={muitosDias ? "preserveStartEnd" : 0}
                 />
                 <YAxis
-                  width={48}
+                  width={60}
                   tick={{ fill: EIXO, fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
@@ -159,6 +158,7 @@ export function PorDia({ serie, aguardando }: { serie: DiaSerie[]; aguardando: b
                         const texto = largo ? formatarCurto(metrica, value) : fmtCompacto(value);
                         return (
                           <text
+ className="txt-grafico num"
                             x={x + width / 2}
                             y={y - 6}
                             textAnchor="middle"

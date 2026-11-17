@@ -18,12 +18,15 @@ npm run check                # testes das regras de cálculo
 - `src/lib/google-ads.ts` — Google Ads REST (OAuth refresh token + MCC, cache ≤ 5 min)
 - `src/lib/calculos.ts` — regra de 3, tetos, centavos, pacing, checklist (puro, testado)
 - `src/lib/dashboard.ts` — orquestração; monta o payload só com valores BRUTOS
-- `src/lib/cores.ts` — paleta Micareta em HEX (cores dinâmicas sempre inline)
+- `src/lib/cores.ts` — paleta e degradês Micareta em HEX (cores críticas e dinâmicas sempre inline)
 - `src/components/` — UI (Recharts nos gráficos)
 
 O dashboard mostra sempre a campanha inteira (início da estratégia até hoje, ou até
 `data_fim`). A série diária segue a regra 5.4; criativos, gênero e idade recebem o
 investido proporcionalmente ao custo de cada linha (maiores restos), fechando ao centavo.
+
+Layout: a partir de 1024px as páginas ocupam exatamente a tela (sem scroll vertical), com grid em `fr`
+e tipografia/espaços em `clamp()` (1280×720 a 2560×1440). Abaixo de 1024px, scroll vertical normal.
 
 Nenhum valor bruto, meta, data, status ou ID de campanha fica fixo no código.
 

@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
-/** Card off-white flutuando sobre o laranja: cantos de 22px, sombra suave, borda branca translúcida. */
+/**
+ * Card off-white flutuando sobre o laranja. Sempre flex-column com min-h-0:
+ * o corpo (flex-1 min-h-0) ocupa o que sobrar da altura que o grid der ao card.
+ */
 export function Painel({
   titulo,
   subtitulo,
@@ -17,17 +20,17 @@ export function Painel({
   corpoClassName?: string;
 }) {
   return (
-    <section className={`card flex min-w-0 flex-col ${className}`}>
+    <section className={`card pad-card flex min-h-0 min-w-0 flex-col gap-[clamp(0.35rem,0.8vh,0.9rem)] ${className}`}>
       {(titulo || acoes) && (
-        <header className="flex shrink-0 flex-wrap items-start justify-between gap-2 px-5 pt-4">
+        <header className="flex shrink-0 flex-wrap items-start justify-between gap-x-2 gap-y-1">
           <div className="min-w-0">
-            {titulo && <h2 className="font-display text-[17px] font-bold leading-tight text-texto">{titulo}</h2>}
-            {subtitulo && <p className="mt-0.5 text-[11px] text-texto-3">{subtitulo}</p>}
+            {titulo && <h2 className="font-display fs-titulo font-bold text-texto">{titulo}</h2>}
+            {subtitulo && <p className="fs-mini text-texto-3">{subtitulo}</p>}
           </div>
           {acoes && <div className="flex flex-wrap items-center gap-2">{acoes}</div>}
         </header>
       )}
-      <div className={`flex min-h-0 flex-1 flex-col px-5 pb-4 pt-3 ${corpoClassName}`}>{children}</div>
+      <div className={`flex min-h-0 flex-1 flex-col ${corpoClassName}`}>{children}</div>
     </section>
   );
 }
@@ -52,9 +55,8 @@ export function Segmentado<T extends string>({
           type="button"
           aria-pressed={valor === o.id}
           onClick={() => onChange(o.id)}
-          className={`whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
-            valor === o.id ? "bg-azul text-white shadow-sm" : "text-texto-2 hover:text-texto"
-          }`}
+          className="fs-mini whitespace-nowrap rounded-full px-[clamp(0.5rem,0.7vw,0.9rem)] py-[clamp(0.15rem,0.35vh,0.35rem)] font-semibold transition-colors"
+          style={valor === o.id ? { background: "#2F6DB5", color: "#FFFFFF" } : { color: "#5E5750" }}
         >
           {o.rotulo}
         </button>
@@ -67,7 +69,7 @@ export function Segmentado<T extends string>({
 export function Badge({ children, fundo, cor }: { children: ReactNode; fundo: string; cor: string }) {
   return (
     <span
-      className="num inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
+      className="num fs-mini inline-flex items-center gap-1 whitespace-nowrap rounded-full px-[clamp(0.4rem,0.6vw,0.75rem)] py-[clamp(0.1rem,0.3vh,0.3rem)] font-semibold"
       style={{ background: fundo, color: cor }}
     >
       {children}

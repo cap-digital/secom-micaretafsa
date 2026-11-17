@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
-import { Header } from "@/components/Header";
 import { FundoMicareta } from "@/components/FundoMicareta";
 import "./globals.css";
 
@@ -17,12 +16,15 @@ export const viewport: Viewport = {
   themeColor: "#E0702A",
 };
 
+/**
+ * ≥ 1024px: a página ocupa exatamente a tela (h-dvh, sem scroll vertical).
+ * < 1024px: scroll vertical normal. O header fica em cada página (mostra o período).
+ */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="pt-BR" className={`${corpo.variable} ${display.variable} h-full antialiased`}>
-      <body className="relative flex min-h-full flex-col text-[13px]">
+      <body className="relative flex min-h-full flex-col text-[13px] lg:h-dvh lg:overflow-hidden">
         <FundoMicareta />
-        <Header />
         {children}
       </body>
     </html>

@@ -74,6 +74,37 @@ export function distribuirProporcional(totalCent: number, pesos: number[], indic
   return partes;
 }
 
+/**
+ * Distribui `totalCent` proporcionalmente aos `pesos` pelo método dos maiores
+ * restos: cada parte recebe o piso e os centavos que sobram vão, um a um, para
+ * as linhas com maior parte fracionária. Fecha exatamente no total e nenhuma
+ * linha se afasta mais de 1 centavo da proporção exata. Usado nos recortes
+ * (criativos, gênero, idade, praças), que podem ter centenas de linhas.
+ * Pesos todos zero → divisão igual.
+ */
+export function distribuirMaioresRestos(totalCent: number, pesos: number[]): number[] {
+  const n = pesos.length;
+  if (n === 0) return [];
+  const limpos = pesos.map((p) => (Number.isFinite(p) && p > 0 ? p : 0));
+  const somaPesos = limpos.reduce((a, b) => a + b, 0);
+  const exatos = somaPesos > 0 ? limpos.map((p) => (totalCent * p) / somaPesos) : limpos.map(() => totalCent / n);
+  const partes = exatos.map((x) => Math.floor(x + EPS));
+  let resto = totalCent - partes.reduce((a, b) => a + b, 0);
+  const ordem = exatos
+    .map((x, i) => ({ i, frac: x - Math.floor(x + EPS) }))
+    .filter(({ i }) => somaPesos === 0 || limpos[i] > 0)
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let k = 0; resto > 0 && ordem.length; k = (k + 1) % ordem.length, resto--) partes[ordem[k].i] += 1;
+  return partes;
+}
+
+/** Soma os centavos dos dias dentro de [de, ate] (inclusive). */
+export function somarIntervalo(diasCent: Map<string, number>, de: string, ate: string): number {
+  let s = 0;
+  for (const [d, c] of diasCent) if (d >= de && d <= ate) s += c;
+  return s;
+}
+
 // ---------------------------------------------------------------------------
 // 5.3 Ajuste das estratégias ao PI
 // ---------------------------------------------------------------------------

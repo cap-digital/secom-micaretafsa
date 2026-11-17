@@ -6,32 +6,47 @@
  */
 
 export type StatusRitmo = "No ritmo" | "Acima" | "Abaixo";
+export type Preset = "ontem" | "7d" | "tudo" | "personalizado";
+
+export interface Periodo {
+  de: string;
+  ate: string;
+  preset: Preset;
+  /** limites selecionáveis (período do projeto) */
+  minimo: string;
+  maximo: string;
+  hoje: string;
+}
 
 export interface DiaSerie {
   data: string;
   investido: number | null;
   impressoes: number | null;
+  cliques: number | null;
   futuro: boolean;
 }
 
-export interface EstrategiaPayload {
+/** Linha de um recorte (gênero, idade, município). */
+export interface LinhaRecorte {
   chave: string;
-  plataforma: string;
-  plataformaRotulo: string;
-  nome: string;
-  kpi: string;
-  status: string;
-  dataInicio: string;
-  valorBruto: number;
+  rotulo: string;
+  impressoes: number;
+  cliques: number;
   investido: number;
-  restante: number;
-  meta: number;
-  entregue: number | null;
-  pctMeta: number | null;
-  custoContratado: number | null;
-  custoRealizado: number | null;
-  aguardandoDados: boolean;
-  segmentacao: string | null;
+  /** % das impressões do recorte */
+  pct: number;
+  cpm: number | null;
+  ctr: number | null;
+}
+
+export interface PracaMapa {
+  chave: string;
+  nome: string;
+  uf: string;
+  lat: number;
+  lng: number;
+  impressoes: number;
+  pct: number;
 }
 
 export interface CriativoPayload {
@@ -41,45 +56,43 @@ export interface CriativoPayload {
   largura: number | null;
   altura: number | null;
   tipo: string;
-  status: string;
   imagemUrl: string | null;
   imagemLocal: string | null;
   impressoes: number;
   cliques: number;
   ctr: number | null;
   investido: number;
-  cpm: number | null;
 }
 
 export interface DashboardPayload {
   atualizadoEm: string;
-  hoje: string;
+  /** "HH:MM" no fuso da Bahia */
+  atualizadoHora: string;
+  periodo: Periodo;
   projeto: {
     nome: string;
     cliente: string;
-    agencia: string | null;
     piIdentificador: string | null;
     dataInicio: string;
     dataFim: string;
     status: string;
     encerrado: boolean;
   };
+  /** KPIs do intervalo filtrado */
   kpis: {
-    contratado: number;
     investido: number;
-    restante: number;
-    kpiPrincipal: string;
+    contratado: number;
     impressoes: number | null;
-    impressoesVisiveis: number | null;
-    alcance: number | null;
-    frequencia: number | null;
     cliques: number | null;
-    ctr: number | null;
-    cpmContratado: number | null;
     cpmRealizado: number | null;
+    cpmContratado: number | null;
+    cpc: number | null;
+    ctr: number | null;
     aguardandoDados: boolean;
   };
+  /** Progresso da meta — sempre sobre o período inteiro */
   progresso: {
+    kpi: string;
     meta: number;
     entregue: number | null;
     pctMeta: number | null;
@@ -95,8 +108,10 @@ export interface DashboardPayload {
     diasRestantes: number;
     brutoPorDiaNecessario: number;
   };
+  /** dias do intervalo filtrado */
   serie: DiaSerie[];
-  estrategias: EstrategiaPayload[];
+  publico: { genero: LinhaRecorte[]; idade: LinhaRecorte[] };
+  pracas: { ranking: LinhaRecorte[]; mapa: PracaMapa[] };
   criativos: CriativoPayload[];
 }
 

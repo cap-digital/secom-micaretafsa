@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { Anton, Inter } from "next/font/google";
-import { Topbar } from "@/components/Topbar";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const display = Anton({ variable: "--font-display", weight: "400", subsets: ["latin"] });
 const corpo = Inter({ variable: "--font-corpo", subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -14,11 +12,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-BR" className={`${display.variable} ${corpo.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col lg:h-dvh lg:overflow-hidden">
-        <Topbar />
-        <main className="flex min-h-0 flex-1 flex-col">{children}</main>
-      </body>
+    <html lang="pt-BR" className={`${corpo.variable} h-full antialiased`}>
+      <body className="flex min-h-full flex-col text-[13px] lg:h-dvh lg:overflow-hidden">{children}</body>
     </html>
   );
 }

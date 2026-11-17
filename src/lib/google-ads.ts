@@ -78,20 +78,25 @@ async function gaql(env: EnvGoogle, customerId: string, query: string): Promise<
   return lotes.flatMap((l) => l.results ?? []);
 }
 
+
 // ---------------------------------------------------------------------------
-// Tipos de retorno (servidor)
+// Tipos de retorno (servidor) — `custo` é GASTO DE PLATAFORMA: nunca exibir
 // ---------------------------------------------------------------------------
 
 export interface DiaGoogle {
   data: string;
-  /** gasto de plataforma em reais — NÃO exibir */
   custo: number;
   impressoes: number;
   cliques: number;
-  impressoesVisiveis: number | null;
 }
 
-export interface AnuncioGoogle {
+export interface MetricasLinha {
+  impressoes: number;
+  cliques: number;
+  custo: number;
+}
+
+export interface AnuncioGoogle extends MetricasLinha {
   id: string;
   nome: string;
   tipo: string;
@@ -99,16 +104,30 @@ export interface AnuncioGoogle {
   imagemUrl: string | null;
   largura: number | null;
   altura: number | null;
-  impressoes: number;
-  cliques: number;
-  /** gasto de plataforma em reais — NÃO exibir */
-  custo: number;
 }
 
-export interface DadosGoogle {
+export interface LinhaSegmento extends MetricasLinha {
+  /** GENDER / AGE_RANGE enum do Google */
+  tipo: string;
+}
+
+export interface CidadeGoogle extends MetricasLinha {
+  /** resource name do geo_target_constant (null = não identificado) */
+  geo: string | null;
+  nome: string | null;
+  canonico: string | null;
+}
+
+export interface DiarioGoogle {
   dias: DiaGoogle[];
-  alcance: { usuarios: number; frequencia: number } | null;
+  buscadoEm: string;
+}
+
+export interface RecortesGoogle {
   anuncios: AnuncioGoogle[];
+  genero: LinhaSegmento[];
+  idade: LinhaSegmento[];
+  cidades: CidadeGoogle[];
   buscadoEm: string;
 }
 
@@ -116,97 +135,166 @@ const n = (v: unknown) => {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
 };
+const metricas = (r: any): MetricasLinha => ({
+  impressoes: n(r.metrics?.impressions),
+  cliques: n(r.metrics?.clicks),
+  custo: n(r.metrics?.costMicros) / 1_000_000,
+});
+const somar = (a: MetricasLinha, b: MetricasLinha) => {
+  a.impressoes += b.impressoes;
+  a.cliques += b.cliques;
+  a.custo += b.custo;
+};
 
 function dimensoesDoNome(nome: string): { w: number; h: number } | null {
   const m = nome.match(/(\d{2,4})\s*x\s*(\d{2,4})/i);
   return m ? { w: Number(m[1]), h: Number(m[2]) } : null;
 }
 
+function filtros(campaignIds: string[], desde: string, ate: string) {
+  const ids = campaignIds.filter((c) => /^\d+$/.test(c));
+  if (!ids.length) throw new Error("estratégia sem campaign_id numérico");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) throw new Error("datas inválidas");
+  return { ids, where: `campaign.id IN (${ids.join(",")}) AND segments.date BETWEEN '${desde}' AND '${ate}'` };
+}
+
+function envObrigatorio(): EnvGoogle {
+  const env = envGoogle();
+  if (!env) throw new Error("credenciais do Google Ads ausentes");
+  return env;
+}
+
 // ---------------------------------------------------------------------------
-// Busca (cache de no máximo 5 min)
+// Série diária — período inteiro da estratégia (base da regra 5.4)
 // ---------------------------------------------------------------------------
 
-/**
- * Busca dia a dia, alcance e anúncios das campanhas de uma estratégia.
- * `env` não entra como argumento do cache (segredos); é lido de novo dentro.
- */
-export async function buscarGoogleEstrategia(
+export async function buscarGoogleDiario(
   customerId: string,
   campaignIds: string[],
   desde: string,
   ate: string,
-): Promise<DadosGoogle> {
+): Promise<DiarioGoogle> {
   "use cache";
   cacheLife({ stale: 60, revalidate: 120, expire: 300 });
 
-  const env = envGoogle();
-  if (!env) throw new Error("credenciais do Google Ads ausentes");
-
-  const ids = campaignIds.filter((c) => /^\d+$/.test(c));
-  if (!ids.length) throw new Error("estratégia sem campaign_id numérico");
-  const filtroCampanha = `campaign.id IN (${ids.join(",")})`;
-  const filtroData = `segments.date BETWEEN '${desde}' AND '${ate}'`;
-
-  // --- Por dia (com fallback se active_view não estiver disponível) ---
-  let linhasDia: any[];
-  let comVisiveis = true;
-  try {
-    linhasDia = await gaql(
-      env,
-      customerId,
-      `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.active_view_impressions
-       FROM campaign WHERE ${filtroCampanha} AND ${filtroData}`,
-    );
-  } catch {
-    comVisiveis = false;
-    linhasDia = await gaql(
-      env,
-      customerId,
-      `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks
-       FROM campaign WHERE ${filtroCampanha} AND ${filtroData}`,
-    );
-  }
+  const env = envObrigatorio();
+  const { where } = filtros(campaignIds, desde, ate);
+  const linhas = await gaql(
+    env,
+    customerId,
+    `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks FROM campaign WHERE ${where}`,
+  );
   const porDia = new Map<string, DiaGoogle>();
-  for (const r of linhasDia) {
+  for (const r of linhas) {
     const data = r.segments?.date as string;
-    const d = porDia.get(data) ?? { data, custo: 0, impressoes: 0, cliques: 0, impressoesVisiveis: comVisiveis ? 0 : null };
-    d.custo += n(r.metrics?.costMicros) / 1_000_000;
-    d.impressoes += n(r.metrics?.impressions);
-    d.cliques += n(r.metrics?.clicks);
-    if (d.impressoesVisiveis !== null) d.impressoesVisiveis += n(r.metrics?.activeViewImpressions);
+    const d = porDia.get(data) ?? { data, custo: 0, impressoes: 0, cliques: 0 };
+    somar(d, metricas(r));
     porDia.set(data, d);
   }
+  return {
+    dias: [...porDia.values()].sort((a, b) => a.data.localeCompare(b.data)),
+    buscadoEm: new Date().toISOString(),
+  };
+}
 
-  // --- Alcance / frequência (opcional; só com 1 campanha, não é somável) ---
-  let alcance: DadosGoogle["alcance"] = null;
-  if (ids.length === 1) {
+// ---------------------------------------------------------------------------
+// Recortes — intervalo filtrado (criativos, gênero, idade, cidades)
+// ---------------------------------------------------------------------------
+
+/** Quantas cidades (por impressões) têm o nome resolvido no geo_target_constant. */
+const CIDADES_RESOLVIDAS = 60;
+
+export async function buscarGoogleRecortes(
+  customerId: string,
+  campaignIds: string[],
+  desde: string,
+  ate: string,
+): Promise<RecortesGoogle> {
+  "use cache";
+  cacheLife({ stale: 60, revalidate: 120, expire: 300 });
+
+  const env = envObrigatorio();
+  const { where } = filtros(campaignIds, desde, ate);
+
+  const [linhasAd, linhasGenero, linhasIdade, linhasLocal] = await Promise.all([
+    gaql(
+      env,
+      customerId,
+      `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.status,
+              ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.pixel_width, ad_group_ad.ad.image_ad.pixel_height,
+              ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images,
+              ad_group_ad.ad.responsive_display_ad.square_marketing_images,
+              metrics.impressions, metrics.clicks, metrics.cost_micros
+       FROM ad_group_ad WHERE ${where}`,
+    ),
+    gaql(
+      env,
+      customerId,
+      `SELECT ad_group_criterion.gender.type, metrics.impressions, metrics.clicks, metrics.cost_micros
+       FROM gender_view WHERE ${where}`,
+    ).catch(() => []),
+    gaql(
+      env,
+      customerId,
+      `SELECT ad_group_criterion.age_range.type, metrics.impressions, metrics.clicks, metrics.cost_micros
+       FROM age_range_view WHERE ${where}`,
+    ).catch(() => []),
+    gaql(
+      env,
+      customerId,
+      `SELECT campaign.id, segments.geo_target_city, metrics.impressions, metrics.clicks, metrics.cost_micros
+       FROM user_location_view WHERE ${where}`,
+    ).catch(() => []),
+  ]);
+
+  // --- Gênero / idade (agrupados pelo tipo) ---
+  const agrupar = (linhas: any[], campo: (r: any) => string | undefined) => {
+    const m = new Map<string, LinhaSegmento>();
+    for (const r of linhas) {
+      const tipo = campo(r) ?? "UNDETERMINED";
+      const l = m.get(tipo) ?? { tipo, impressoes: 0, cliques: 0, custo: 0 };
+      somar(l, metricas(r));
+      m.set(tipo, l);
+    }
+    return [...m.values()];
+  };
+  const genero = agrupar(linhasGenero, (r) => r.adGroupCriterion?.gender?.type);
+  const idade = agrupar(linhasIdade, (r) => r.adGroupCriterion?.ageRange?.type);
+
+  // --- Cidades (localização física do usuário) ---
+  const porCidade = new Map<string, CidadeGoogle>();
+  for (const r of linhasLocal) {
+    const geo = (r.segments?.geoTargetCity as string | undefined) ?? null;
+    const k = geo ?? "—";
+    const c = porCidade.get(k) ?? { geo, nome: null, canonico: null, impressoes: 0, cliques: 0, custo: 0 };
+    somar(c, metricas(r));
+    porCidade.set(k, c);
+  }
+  const cidades = [...porCidade.values()].sort((a, b) => b.impressoes - a.impressoes);
+  const aResolver = cidades.filter((c) => c.geo).slice(0, CIDADES_RESOLVIDAS);
+  if (aResolver.length) {
     try {
-      const [r] = await gaql(
+      const geos = await gaql(
         env,
         customerId,
-        `SELECT metrics.unique_users, metrics.average_impression_frequency_per_user
-         FROM campaign WHERE ${filtroCampanha} AND ${filtroData}`,
+        `SELECT geo_target_constant.resource_name, geo_target_constant.name, geo_target_constant.canonical_name
+         FROM geo_target_constant
+         WHERE geo_target_constant.resource_name IN (${aResolver.map((c) => `'${c.geo}'`).join(",")})`,
       );
-      if (r?.metrics?.uniqueUsers)
-        alcance = { usuarios: n(r.metrics.uniqueUsers), frequencia: n(r.metrics.averageImpressionFrequencyPerUser) };
+      const info = new Map(geos.map((g) => [g.geoTargetConstant?.resourceName, g.geoTargetConstant]));
+      for (const c of aResolver) {
+        const g = info.get(c.geo);
+        if (g) {
+          c.nome = g.name ?? null;
+          c.canonico = g.canonicalName ?? null;
+        }
+      }
     } catch {
-      alcance = null;
+      /* sem nomes: ranking mostra só "Outras"/"Não identificado" */
     }
   }
 
-  // --- Por anúncio ---
-  const linhasAd = await gaql(
-    env,
-    customerId,
-    `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.status,
-            ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.pixel_width, ad_group_ad.ad.image_ad.pixel_height,
-            ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images,
-            ad_group_ad.ad.responsive_display_ad.square_marketing_images,
-            metrics.impressions, metrics.clicks, metrics.ctr, metrics.cost_micros
-     FROM ad_group_ad WHERE ${filtroCampanha} AND ${filtroData}`,
-  );
-
-  // Resolve os assets de imagem dos anúncios responsivos.
+  // --- Anúncios (+ assets dos responsivos) ---
   const assetsPorAd = new Map<string, string[]>();
   for (const r of linhasAd) {
     const rda = r.adGroupAd?.ad?.responsiveDisplayAd;
@@ -245,47 +333,47 @@ export async function buscarGoogleEstrategia(
   for (const r of linhasAd) {
     const ad = r.adGroupAd?.ad ?? {};
     const id = String(ad.id);
-    const nome: string = ad.name || ad.imageAd?.name || `Anúncio ${id}`;
-    let imagemUrl: string | null = ad.imageAd?.imageUrl ?? null;
-    let largura: number | null = ad.imageAd?.pixelWidth ? n(ad.imageAd.pixelWidth) : null;
-    let altura: number | null = ad.imageAd?.pixelHeight ? n(ad.imageAd.pixelHeight) : null;
-    if (!imagemUrl) {
-      const primeiro = (assetsPorAd.get(id) ?? []).map((a) => assetInfo.get(a)).find(Boolean);
-      if (primeiro) {
-        imagemUrl = primeiro.url;
-        largura = largura ?? primeiro.w;
-        altura = altura ?? primeiro.h;
+    if (!anuncios.has(id)) {
+      const nome: string = ad.name || ad.imageAd?.name || `Anúncio ${id}`;
+      let imagemUrl: string | null = ad.imageAd?.imageUrl ?? null;
+      let largura: number | null = ad.imageAd?.pixelWidth ? n(ad.imageAd.pixelWidth) : null;
+      let altura: number | null = ad.imageAd?.pixelHeight ? n(ad.imageAd.pixelHeight) : null;
+      if (!imagemUrl) {
+        const primeiro = (assetsPorAd.get(id) ?? []).map((a) => assetInfo.get(a)).find(Boolean);
+        if (primeiro) {
+          imagemUrl = primeiro.url;
+          largura = largura ?? primeiro.w;
+          altura = altura ?? primeiro.h;
+        }
       }
-    }
-    if (!largura || !altura) {
-      const d = dimensoesDoNome(nome);
-      if (d) {
-        largura = d.w;
-        altura = d.h;
+      if (!largura || !altura) {
+        const d = dimensoesDoNome(nome);
+        if (d) {
+          largura = d.w;
+          altura = d.h;
+        }
       }
+      anuncios.set(id, {
+        id,
+        nome,
+        tipo: String(ad.type ?? ""),
+        status: String(r.adGroupAd?.status ?? ""),
+        imagemUrl,
+        largura,
+        altura,
+        impressoes: 0,
+        cliques: 0,
+        custo: 0,
+      });
     }
-    const atual = anuncios.get(id) ?? {
-      id,
-      nome,
-      tipo: String(ad.type ?? ""),
-      status: String(r.adGroupAd?.status ?? ""),
-      imagemUrl,
-      largura,
-      altura,
-      impressoes: 0,
-      cliques: 0,
-      custo: 0,
-    };
-    atual.impressoes += n(r.metrics?.impressions);
-    atual.cliques += n(r.metrics?.clicks);
-    atual.custo += n(r.metrics?.costMicros) / 1_000_000;
-    anuncios.set(id, atual);
+    somar(anuncios.get(id)!, metricas(r));
   }
 
   return {
-    dias: [...porDia.values()].sort((a, b) => a.data.localeCompare(b.data)),
-    alcance,
     anuncios: [...anuncios.values()],
+    genero,
+    idade,
+    cidades,
     buscadoEm: new Date().toISOString(),
   };
 }

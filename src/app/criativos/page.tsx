@@ -1,38 +1,54 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { connection } from "next/server";
 import { carregarDashboard } from "@/lib/dashboard";
-import { CabecalhoProjeto } from "@/components/CabecalhoProjeto";
-import { GridCriativos } from "@/components/GridCriativos";
+import { Topbar } from "@/components/Topbar";
+import { Criativos } from "@/components/Criativos";
 import { Carregando, EstadoVazio } from "@/components/EstadoVazio";
 
 export const metadata: Metadata = { title: "Criativos · Micareta de Feira 2026" };
 
-export default function Page() {
+type Busca = Promise<Record<string, string | string[] | undefined>>;
+const um = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+export default function Page({ searchParams }: { searchParams: Busca }) {
   return (
-    <Suspense fallback={<Carregando />}>
-      <Criativos />
+    <Suspense
+      fallback={
+        <>
+          <Topbar />
+          <Carregando />
+        </>
+      }
+    >
+      <PaginaCriativos searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Criativos() {
-  await connection();
-  const r = await carregarDashboard();
-  if (r.estado === "vazio") return <EstadoVazio titulo={r.titulo} mensagem={r.mensagem} />;
+async function PaginaCriativos({ searchParams }: { searchParams: Busca }) {
+  const sp = await searchParams;
+  const r = await carregarDashboard({ de: um(sp.de), ate: um(sp.ate) });
+  if (r.estado === "vazio") {
+    return (
+      <>
+        <Topbar />
+        <EstadoVazio titulo={r.titulo} mensagem={r.mensagem} />
+      </>
+    );
+  }
   const d = r.payload;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1680px] min-h-0 flex-1 flex-col gap-3 p-4 lg:px-6 lg:py-4">
-      <CabecalhoProjeto dados={d} aviso={r.aviso} />
-      {d.criativos.length ? (
-        <GridCriativos criativos={d.criativos} />
-      ) : (
-        <EstadoVazio
-          titulo="Aguardando dados"
-          mensagem="Os criativos aparecem aqui assim que a plataforma registrar veiculação."
-        />
-      )}
-    </div>
+    <>
+      <Topbar periodo={d.periodo} atualizadoHora={d.atualizadoHora} status={d.projeto.status} />
+      <main className="mx-auto flex w-full max-w-[1680px] min-h-0 flex-1 flex-col gap-3 p-4 lg:px-6">
+        {r.aviso && <p className="shrink-0 rounded-lg bg-magenta-suave px-3 py-1.5 text-xs text-texto">{r.aviso}</p>}
+        {d.criativos.length ? (
+          <Criativos criativos={d.criativos} />
+        ) : (
+          <EstadoVazio titulo="Sem veiculação no período" mensagem="Escolha outro intervalo de datas na barra superior." />
+        )}
+      </main>
+    </>
   );
 }

@@ -1,56 +1,55 @@
 @import "tailwindcss";
 
 /*
- * Paleta extraída dos criativos MICARETA DE FEIRA 2026 (GIFs em public/criativos):
- *  roxo/violeta de fundo #b70097 · listras magenta #db1899 · amarelo-limão #d4f104
- *  preto #0d0a0c · laranja do logo #fab53c · rosa #ec1270 · verde-água #01e8fe
- *  verde-lima de apoio #bfe599 · índigo das sombras #2d099b
+ * Base neutra (cinza claro + cards brancos). Cores da Micareta (extraídas dos
+ * criativos) só como acento:
+ *  roxo #b70097 (barras, botões ativos) · magenta #db1899 (secundária)
+ *  amarelo-limão #d4f104 (somente badges)
+ * Pares categóricos validados (CVD/contraste): #930c80 + #e2559f.
  */
 :root {
+  --fundo: #f4f4f6;
+  --card: #ffffff;
+  --borda: #e6e6ea;
+  --borda-forte: #d6d6dc;
+  --texto: #18181b;
+  --texto-2: #5f5f6b;
+  --texto-3: #8e8e99;
   --roxo: #b70097;
-  --roxo-escuro: #8a0072;
-  --violeta: #2d099b;
+  --roxo-cat: #930c80;
+  --roxo-suave: #f7e6f4;
   --magenta: #db1899;
-  --rosa: #ec1270;
-  --lilas: #fc9cd1;
+  --magenta-cat: #e2559f;
+  --magenta-suave: #fde8f3;
   --limao: #d4f104;
-  --laranja: #fab53c;
-  --agua: #01e8fe;
-  --lima: #bfe599;
-  --preto: #0d0a0c;
-  --branco: #ffffff;
-  --papel: #f8f4f8;
-  --borda: #e9dde9;
-  --texto: #0d0a0c;
-  --texto-2: #5c4b5f;
-  --texto-3: #8a7a8c;
+  --limao-suave: #f3fbc4;
+  --neutro: #d4d4d8;
   color-scheme: light;
 }
 
 @theme inline {
-  --color-roxo: var(--roxo);
-  --color-roxo-escuro: var(--roxo-escuro);
-  --color-violeta: var(--violeta);
-  --color-magenta: var(--magenta);
-  --color-rosa: var(--rosa);
-  --color-lilas: var(--lilas);
-  --color-limao: var(--limao);
-  --color-laranja: var(--laranja);
-  --color-agua: var(--agua);
-  --color-lima: var(--lima);
-  --color-preto: var(--preto);
-  --color-papel: var(--papel);
+  --color-fundo: var(--fundo);
+  --color-card: var(--card);
   --color-borda: var(--borda);
+  --color-borda-forte: var(--borda-forte);
   --color-texto: var(--texto);
   --color-texto-2: var(--texto-2);
   --color-texto-3: var(--texto-3);
+  --color-roxo: var(--roxo);
+  --color-roxo-cat: var(--roxo-cat);
+  --color-roxo-suave: var(--roxo-suave);
+  --color-magenta: var(--magenta);
+  --color-magenta-cat: var(--magenta-cat);
+  --color-magenta-suave: var(--magenta-suave);
+  --color-limao: var(--limao);
+  --color-limao-suave: var(--limao-suave);
+  --color-neutro: var(--neutro);
   --font-sans: var(--font-corpo);
-  --font-display: var(--font-display);
 }
 
 html,
 body {
-  background: var(--papel);
+  background: var(--fundo);
   color: var(--texto);
 }
 
@@ -58,30 +57,28 @@ body {
   font-family: var(--font-corpo), system-ui, sans-serif;
 }
 
-/* Listras diagonais dos criativos — textura discreta */
-.listras {
-  background-color: var(--roxo);
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgb(219 24 153 / 0.55) 0 14px,
-    transparent 14px 34px
-  );
-}
-.listras-suaves {
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgb(183 0 151 / 0.06) 0 10px,
-    transparent 10px 26px
-  );
-}
-
-.titulo-display {
-  font-family: var(--font-display), Impact, sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.01em;
-  line-height: 0.95;
-}
-
 .num {
   font-variant-numeric: tabular-nums;
+}
+
+/* rótulo pequeno padrão dos cards */
+.rotulo {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--texto-2);
+}
+
+/* leaflet: tooltip no estilo dos cards */
+.leaflet-tooltip.tooltip-praca {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.08);
+  font-family: var(--font-corpo), system-ui, sans-serif;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.leaflet-container {
+  background: #f2f2f0;
+  font-family: var(--font-corpo), system-ui, sans-serif;
 }

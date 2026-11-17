@@ -1,138 +1,130 @@
+import type { ReactNode } from "react";
 import type { DashboardPayload, StatusRitmo } from "@/lib/tipos";
-import { fmtBRL, fmtBRL0, fmtCompacto, fmtInt, fmtPct } from "@/lib/formato";
+import { fmtBRL, fmtCompacto, fmtInt, fmtPct } from "@/lib/formato";
+import { Painel } from "./Painel";
 
-const COR_RITMO: Record<StatusRitmo, { fundo: string; icone: string }> = {
-  "No ritmo": { fundo: "bg-lima text-preto", icone: "●" },
-  Acima: { fundo: "bg-laranja text-preto", icone: "▲" },
-  Abaixo: { fundo: "bg-rosa text-white", icone: "▼" },
+const BADGE_RITMO: Record<StatusRitmo, { classe: string; icone: string }> = {
+  "No ritmo": { classe: "bg-limao-suave text-texto ring-1 ring-limao", icone: "●" },
+  Acima: { classe: "bg-roxo-suave text-roxo-cat", icone: "▲" },
+  Abaixo: { classe: "bg-magenta-suave text-[#a3125f]", icone: "▼" },
 };
 
 function Barra({
   rotulo,
-  valorTexto,
-  totalTexto,
   pct,
   pctIdeal,
-  rotuloIdeal,
   cor,
+  esquerda,
+  direita,
 }: {
   rotulo: string;
-  valorTexto: string;
-  totalTexto: string;
   pct: number | null;
   pctIdeal: number;
-  rotuloIdeal: string;
   cor: string;
+  esquerda: ReactNode;
+  direita: ReactNode;
 }) {
-  const largura = Math.min(100, Math.max(0, pct ?? 0));
+  const w = Math.min(100, Math.max(0, pct ?? 0));
   const ideal = Math.min(100, Math.max(0, pctIdeal));
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/85">{rotulo}</p>
-        <p className="titulo-display num text-2xl text-limao">{fmtPct(pct)}</p>
+      <div className="flex items-baseline justify-between">
+        <span className="rotulo">{rotulo}</span>
+        <span className="num text-[15px] font-semibold text-texto">{fmtPct(pct)}</span>
       </div>
       <div
-        className="relative mt-1.5 h-5 rounded-full bg-preto/35 ring-1 ring-white/15"
+        className="relative mt-1.5 h-2.5 rounded-full bg-fundo"
         role="progressbar"
         aria-label={rotulo}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(largura)}
+        aria-valuenow={Math.round(w)}
       >
-        <div className={`h-full rounded-full ${cor}`} style={{ width: `${largura}%` }} />
+        <div className="h-full rounded-full" style={{ width: `${w}%`, background: cor }} />
         <div
-          className="absolute -top-1.5 -bottom-1.5 w-0.5 rounded bg-white"
+          className="absolute -bottom-1 -top-1 w-0.5 rounded bg-texto"
           style={{ left: `calc(${ideal}% - 1px)` }}
-          title={rotuloIdeal}
-        >
-          <span className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-white" />
-        </div>
+          title="Ideal até hoje"
+        />
       </div>
-      <div className="mt-1 flex justify-between gap-2 text-xs text-white/85">
-        <span className="num">
-          <strong className="font-semibold text-white">{valorTexto}</strong> de {totalTexto}
-        </span>
-        <span className="num">{rotuloIdeal}</span>
+      <div className="num mt-1 flex justify-between text-[11px] text-texto-3">
+        <span>{esquerda}</span>
+        <span>{direita}</span>
       </div>
     </div>
   );
 }
 
-/**
- * Progresso da Meta — componente reutilizável.
- * Recebe o bloco `progresso` do payload (tudo em bruto).
- */
-export function ProgressoMeta({ progresso, kpi = "CPM" }: { progresso: DashboardPayload["progresso"]; kpi?: string }) {
-  const p = progresso;
-  const ritmo = COR_RITMO[p.status];
-  const unidade = kpi === "CPM" ? "impressões" : "resultados";
+/** Progresso da meta — sempre sobre o período inteiro (independe do filtro). */
+export function ProgressoMeta({ progresso: p }: { progresso: DashboardPayload["progresso"] }) {
+  const badge = BADGE_RITMO[p.status];
+  const unidade = p.kpi === "CPM" ? "Impressões" : "Resultados";
+  const superada = (p.pctMeta ?? 0) >= 100;
   const pctEntregaIdeal = p.meta > 0 ? (p.entregaIdealAteHoje / p.meta) * 100 : 0;
 
   return (
-    <section className="listras relative flex h-full flex-col overflow-hidden rounded-2xl border-2 border-preto p-5 text-white shadow-[5px_5px_0_var(--preto)]">
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-roxo/40 via-roxo/75 to-roxo-escuro/95" />
-      <div className="relative flex h-full flex-col justify-between gap-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85">Progresso da meta</p>
-            <h2 className="titulo-display mt-1 whitespace-nowrap text-[2.1rem] text-white sm:text-[2.6rem]">
-              <span className="num">{fmtCompacto(p.entregue)}</span>
-              <span className="text-xl text-white/80"> / {fmtCompacto(p.meta)}</span>
-            </h2>
-            <p className="text-xs text-white/85">{unidade} entregues · meta contratada</p>
-          </div>
-          <span
-            className={`titulo-display flex shrink-0 items-center gap-1.5 rounded-md border-2 border-preto px-2.5 py-1.5 text-base ${ritmo.fundo} shadow-[3px_3px_0_var(--preto)]`}
-          >
-            <span aria-hidden className="text-xs">
-              {ritmo.icone}
+    <Painel
+      titulo="Progresso da meta"
+      subtitulo="período completo do contrato"
+      className="h-full"
+      acoes={
+        <div className="flex items-center gap-1.5">
+          {superada && (
+            <span className="rounded-full bg-limao px-2 py-0.5 text-[11px] font-semibold text-texto">Meta superada</span>
+          )}
+          <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.classe}`}>
+            <span aria-hidden className="text-[8px]">
+              {badge.icone}
             </span>
             {p.status}
           </span>
         </div>
+      }
+      corpoClassName="justify-between gap-3"
+    >
+      <p className="num text-[26px] font-semibold leading-none tracking-tight text-texto">
+        {fmtCompacto(p.entregue)}
+        <span className="text-sm font-normal text-texto-3">
+          {" "}
+          / {fmtCompacto(p.meta)} {unidade.toLowerCase()}
+        </span>
+      </p>
 
-        <Barra
-          rotulo={`Meta de ${unidade}`}
-          valorTexto={fmtInt(p.entregue)}
-          totalTexto={fmtInt(p.meta)}
-          pct={p.pctMeta}
-          pctIdeal={pctEntregaIdeal}
-          rotuloIdeal={`ideal hoje ${fmtCompacto(p.entregaIdealAteHoje)}`}
-          cor="bg-limao"
-        />
-        <Barra
-          rotulo="Investimento bruto"
-          valorTexto={fmtBRL0(p.investido)}
-          totalTexto={fmtBRL0(p.contratado)}
-          pct={p.pctInvestido}
-          pctIdeal={p.pctIdeal}
-          rotuloIdeal={`ideal hoje ${fmtBRL0(p.idealAteHoje)}`}
-          cor="bg-laranja"
-        />
+      <Barra
+        rotulo={`${unidade} entregues × meta`}
+        pct={p.pctMeta}
+        pctIdeal={pctEntregaIdeal}
+        cor="var(--roxo)"
+        esquerda={`${fmtInt(p.entregue)} de ${fmtInt(p.meta)}`}
+        direita={`ideal hoje ${fmtCompacto(p.entregaIdealAteHoje)}`}
+      />
+      <Barra
+        rotulo="Investido × contratado"
+        pct={p.pctInvestido}
+        pctIdeal={p.pctIdeal}
+        cor="var(--magenta)"
+        esquerda={`${fmtBRL(p.investido)} de ${fmtBRL(p.contratado)}`}
+        direita={`ideal hoje ${fmtBRL(p.idealAteHoje)}`}
+      />
 
-        <p className="flex items-center gap-1.5 text-[11px] text-white/80">
-          <span aria-hidden className="inline-block h-2 w-2 rotate-45 bg-white" /> marcador branco = ideal até hoje (ritmo linear do
-          período)
-        </p>
-
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-lg bg-white/95 px-3 py-2 text-preto">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-texto-2">Dias restantes</p>
-            <p className="titulo-display num text-2xl">{p.diasRestantes}</p>
-            <p className="text-[10px] text-texto-3">
-              dia {p.diasPassados} de {p.diasTotais}
-            </p>
-          </div>
-          <div className="col-span-2 rounded-lg bg-white/95 px-3 py-2 text-preto">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-texto-2">Bruto por dia necessário</p>
-            <p className="titulo-display num text-2xl">{p.diasRestantes > 0 ? fmtBRL(p.brutoPorDiaNecessario) : "—"}</p>
-            <p className="text-[10px] text-texto-3">
-              ritmo: realizado {fmtBRL0(p.investido)} vs ideal {fmtBRL0(p.idealAteHoje)}
-            </p>
-          </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-fundo px-3 py-2">
+          <p className="rotulo">Dias restantes</p>
+          <p className="num text-lg font-semibold text-texto">{p.diasRestantes}</p>
+          <p className="text-[10px] text-texto-3">
+            dia {p.diasPassados} de {p.diasTotais}
+          </p>
+        </div>
+        <div className="rounded-lg bg-fundo px-3 py-2">
+          <p className="rotulo">Bruto por dia necessário</p>
+          <p className="num text-lg font-semibold text-texto">
+            {p.diasRestantes > 0 ? fmtBRL(p.brutoPorDiaNecessario) : "—"}
+          </p>
+          <p className="text-[10px] text-texto-3">
+            <span className="mr-1 inline-block h-2 w-0.5 bg-texto align-middle" />= ideal até hoje
+          </p>
         </div>
       </div>
-    </section>
+    </Painel>
   );
 }

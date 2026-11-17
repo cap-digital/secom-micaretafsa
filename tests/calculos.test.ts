@@ -13,6 +13,8 @@ import {
   rodarChecklist,
   encontrarChavesProibidas,
   intervaloDatas,
+  distribuirMaioresRestos,
+  somarIntervalo,
 } from "../src/lib/calculos.ts";
 
 const soma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -132,6 +134,30 @@ test("checklist: detecta dados de plataforma no payload e somas quebradas", () =
   assert.ok(erros.some((e) => e.startsWith("[2]")));
   assert.ok(erros.some((e) => e.startsWith("[3]")));
   assert.ok(erros.some((e) => e.startsWith("[5]")));
+});
+
+test("recortes (maiores restos): fecham no total e ficam a < 1 centavo da proporção", () => {
+  // custos de plataforma por gênero (reais) da campanha
+  const custos = [445.60905, 406.950593, 168.765737];
+  const total = 510_752; // investido bruto do período, em centavos
+  const partes = distribuirMaioresRestos(total, custos);
+  assert.equal(soma(partes), total);
+  const somaC = soma(custos);
+  partes.forEach((p, i) => assert.ok(Math.abs(p - (total * custos[i]) / somaC) < 1));
+  // muitas linhas pequenas (ex.: 1.112 cidades) — nenhuma recebe a sobra inteira
+  const muitas = Array.from({ length: 1112 }, (_, i) => 0.001 + (i % 7) * 0.0003);
+  const pm = distribuirMaioresRestos(99_999, muitas);
+  assert.equal(soma(pm), 99_999);
+  const somaM = soma(muitas);
+  pm.forEach((p, i) => assert.ok(Math.abs(p - (99_999 * muitas[i]) / somaM) < 1));
+});
+
+test("investido do intervalo = soma dos dias brutos (regra 5.4)", () => {
+  const r = converterEstrategia({ valorBrutoCent: 1_500_000, orcamentoPlataforma: 3000, gastosDia: [498.74, 522.68], fechado: false });
+  const dias = new Map([["2026-11-16", r.diasCent[0]], ["2026-11-17", r.diasCent[1]]]);
+  assert.equal(somarIntervalo(dias, "2026-11-16", "2026-11-22"), r.investidoCent);
+  assert.equal(somarIntervalo(dias, "2026-11-17", "2026-11-17"), r.diasCent[1]);
+  assert.equal(somarIntervalo(dias, "2026-11-18", "2026-11-22"), 0);
 });
 
 test("intervalo de datas inclusivo", () => {

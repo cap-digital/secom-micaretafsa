@@ -1,35 +1,40 @@
 "use client";
 
-import { Area, CartesianGrid, ComposedChart, LabelList, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useCallback, useState } from "react";
+import { Area } from "@/components/charts/area";
+import { ComposedChart } from "@/components/charts/composed-chart";
+import { Grid } from "@/components/charts/grid";
+import { Line } from "@/components/charts/line";
+import { ProjectionLine } from "@/components/charts/projection-line";
+import { ValueLabels } from "@/components/charts/value-labels";
+import { XAxis } from "@/components/charts/x-axis";
+import { YAxis } from "@/components/charts/y-axis";
+import { useFonteGrafico } from "@/hooks/use-fonte-grafico";
 import type { PontoRitmo } from "@/lib/tipos";
 import { COR } from "@/lib/cores";
-import { fmtCompacto, fmtDiaMes, fmtInt } from "@/lib/formato";
+import { fmtCompacto, fmtData, fmtInt } from "@/lib/formato";
+import { FocoGrafico, LinhaFoco } from "./FocoGrafico";
 import { Painel } from "./Painel";
 
-interface Ponto extends PontoRitmo {
-  dia: string;
-}
+/** "2026-11-16" → Date local ao meio-dia (evita virar o dia por fuso). */
+const paraData = (iso: string) => new Date(`${iso}T12:00:00`);
 
-function Dica({ active, payload }: { active?: boolean; payload?: { payload: Ponto }[] }) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
-  return (
-    <div className="num rounded-xl border border-borda bg-white px-3 py-2 text-xs shadow-md">
-      <p className="font-semibold text-texto">{p.dia}</p>
-      <p className="text-texto-2">
-        Acumulado: <strong className="text-texto">{p.acumulado === null ? "a veicular" : fmtInt(p.acumulado)}</strong>
-      </p>
-      <p className="text-texto-2">
-        Meta esperada: <strong className="text-texto">{fmtInt(p.esperado)}</strong>
-      </p>
-    </div>
-  );
-}
-
-/** Impressões acumuladas (área) × meta esperada acumulada (linha tracejada), período inteiro. */
+/**
+ * Impressões acumuladas (área) × meta esperada acumulada (tracejado).
+ * As séries do Bklit não aceitam nulos: os dados vão até hoje e a meta dos
+ * dias futuros segue como ProjectionLine até o fim do contrato (xDomain).
+ */
 export function RitmoMeta({ ritmo }: { ritmo: PontoRitmo[] }) {
-  const dados: Ponto[] = ritmo.map((r) => ({ ...r, dia: fmtDiaMes(r.data) }));
-  const ultimoReal = dados.reduce((u, d, i) => (d.acumulado !== null ? i : u), -1);
+  const fs = useFonteGrafico();
+  const [foco, setFoco] = useState<number | null>(null);
+  const aoFocar = useCallback((i: number | null) => setFoco(i), []);
+  const realizados = ritmo.filter((r) => r.acumulado !== null);
+  const dados = realizados.map((r) => ({ date: paraData(r.data), acumulado: r.acumulado as number, esperado: r.esperado }));
+  const ultimo = realizados[realizados.length - 1];
+  const futuros = ritmo.filter((r) => r.acumulado === null);
+  const projecao = ultimo && futuros.length ? [ultimo, ...futuros].map((r) => ({ date: paraData(r.data), value: r.esperado })) : [];
+  const dominio: [Date, Date] | undefined = ritmo.length ? [paraData(ritmo[0].data), paraData(ritmo[ritmo.length - 1].data)] : undefined;
+
   return (
     <Painel
       titulo="Ritmo em relação à meta"
@@ -48,78 +53,41 @@ export function RitmoMeta({ ritmo }: { ritmo: PontoRitmo[] }) {
         </div>
       }
     >
-      <div className="relative min-h-[220px] flex-1 lg:min-h-0">
-        <div className="absolute inset-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={dados} margin={{ top: 22, right: 14, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="gradAcumulado" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COR.azul} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={COR.azul} stopOpacity={0.03} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} stroke={COR.grade} />
-              <XAxis
-                dataKey="dia"
-                tick={{ fill: COR.eixo, fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: COR.grade }}
-                interval="preserveStartEnd"
-                padding={{ left: 28, right: 12 }}
-              />
-              <YAxis width={68} tick={{ fill: COR.eixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtCompacto(v)} />
-              <Tooltip content={<Dica />} cursor={{ stroke: COR.eixo, strokeDasharray: "3 3" }} />
-              <Line
-                type="linear"
-                dataKey="esperado"
-                stroke={COR.laranja}
-                strokeWidth={2}
-                strokeDasharray="6 4"
-                dot={false}
-                isAnimationActive={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="acumulado"
-                stroke={COR.azul}
-                strokeWidth={2.5}
-                fill="url(#gradAcumulado)"
-                connectNulls={false}
-                dot={{ r: 4, fill: COR.azul, stroke: "#fff", strokeWidth: 2 }}
-                activeDot={{ r: 6, stroke: "#fff", strokeWidth: 2 }}
-                isAnimationActive={false}
-              >
-                <LabelList
-                  dataKey="acumulado"
-                  content={(props) => {
-                    const { x, y, value, index } = props as { x?: number; y?: number; value?: unknown; index?: number };
-                    if (typeof value !== "number" || x === undefined || y === undefined) return null;
-                    // último ponto: rótulo acima; anteriores: abaixo e à direita (lado livre de uma linha que sobe)
-                    const ultimo = index === ultimoReal;
-                    return (
-                      <text
- className="txt-grafico num"
-                        x={Number(x) + (ultimo ? 0 : 7)}
-                        y={Number(y) + (ultimo ? -10 : 16)}
-                        textAnchor={ultimo ? "middle" : "start"}
-                        fontSize={11}
-                        fontWeight={600}
-                        fill={COR.azulEscuro}
-                        stroke={COR.card}
-                        strokeWidth={4}
-                        paintOrder="stroke"
-                        strokeLinejoin="round"
-                      >
-                        {fmtCompacto(value)}
-                      </text>
-                    );
-                  }}
-                />
-              </Area>
+      {!dados.length ? (
+        <p className="m-auto text-xs text-texto-3">Aguardando dados</p>
+      ) : (
+        <div className="grafico-fluido relative min-h-[220px] flex-1 lg:min-h-0">
+          {/* bottom-1: a caixa do eixo Y passa alguns px do gráfico; fica dentro do card */}
+          <div className="absolute inset-x-0 top-0 bottom-1">
+            <ComposedChart
+              aspectRatio=""
+              className="h-full w-full"
+              data={dados}
+              margin={{ top: Math.round(fs * 2), right: Math.round(fs * 1.5), bottom: Math.round(fs * 2.6), left: Math.round(fs * 4.2) }}
+              xDomain={dominio}
+              xDomainSlotCount={ritmo.length}
+            >
+              <Grid horizontal strokeDasharray="0" />
+              <Area dataKey="acumulado" fill={COR.azul} fillOpacity={0.3} stroke={COR.azul} strokeWidth={2.5} showMarkers fadeEdges={false} />
+              <Line dataKey="esperado" stroke={COR.laranja} strokeWidth={2} dashFromIndex={0} dashArray="6,4" fadeEdges={false} showHighlight={false} />
+              {projecao.length > 1 && <ProjectionLine data={projecao} stroke={COR.laranja} strokeWidth={2} strokeDasharray="6,4" />}
+              <ValueLabels fontSize={fs} format={fmtCompacto} valueKey="acumulado" color={COR.azulEscuro} />
+              {/* sem o "0" (encostaria no primeiro rótulo do eixo X) */}
+              <YAxis formatValue={(v) => (v === 0 ? "" : fmtCompacto(v))} numTicks={4} />
+              <XAxis numTicks={7} tickMode="domain" />
+              <FocoGrafico onFoco={aoFocar} />
             </ComposedChart>
-          </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      )}
+      <LinhaFoco>
+        {foco !== null && realizados[foco] && (
+          <>
+            <strong className="text-texto">{fmtData(realizados[foco].data)}</strong> · acumulado {fmtInt(realizados[foco].acumulado)} · meta esperada{" "}
+            {fmtInt(realizados[foco].esperado)}
+          </>
+        )}
+      </LinhaFoco>
     </Painel>
   );
 }

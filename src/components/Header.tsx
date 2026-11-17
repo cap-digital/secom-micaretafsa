@@ -92,7 +92,7 @@ export function Header({ periodo, aviso }: { periodo?: Periodo; aviso?: string |
             </span>
             {periodo && (
               <span className="fs-mini num block font-medium" style={{ opacity: 0.85 }}>
-                {fmtData(periodo.de)} a {fmtData(periodo.ate)} · valores em bruto
+                {fmtData(periodo.de)} a {fmtData(periodo.ate)}
               </span>
             )}
             {aviso && (

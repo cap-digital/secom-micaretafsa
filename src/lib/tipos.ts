@@ -37,6 +37,8 @@ export interface LinhaRecorte {
   pct: number;
   cpm: number | null;
   ctr: number | null;
+  /** investido bruto ÷ cliques */
+  cpc: number | null;
 }
 
 export interface CriativoPayload {

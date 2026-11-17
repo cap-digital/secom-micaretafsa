@@ -19,7 +19,9 @@ npm run check                # testes das regras de cálculo
 - `src/lib/calculos.ts` — regra de 3, tetos, centavos, pacing, checklist (puro, testado)
 - `src/lib/dashboard.ts` — orquestração; monta o payload só com valores BRUTOS
 - `src/lib/cores.ts` — paleta e degradês Micareta em HEX (cores críticas e dinâmicas sempre inline)
-- `src/components/` — UI (Recharts nos gráficos)
+- `src/components/charts/` — gráficos Bklit UI (registry `@bklit` via shadcn, `npx shadcn add @bklit/<nome>`);
+  `value-labels.tsx` é da CAP (veio do dashboard Embasa El Niño), adaptado com `fontSize`/`labelKey`
+- `src/components/` — UI do dashboard
 
 O dashboard mostra sempre a campanha inteira (início da estratégia até hoje, ou até
 `data_fim`). A série diária segue a regra 5.4; criativos, gênero e idade recebem o

@@ -62,10 +62,10 @@ async function VisaoGeral() {
             <RitmoMeta ritmo={d.ritmo} />
           </div>
           <div className="flex min-h-0 min-w-0 flex-col">
-            <Genero linhas={d.publico.genero} />
+            <Genero linhas={d.publico.genero} medias={{ cpm: d.kpis.cpmRealizado, cpc: d.kpis.cpc }} />
           </div>
           <div className="flex min-h-0 min-w-0 flex-col">
-            <Idade linhas={d.publico.idade} />
+            <Idade linhas={d.publico.idade} medias={{ cpm: d.kpis.cpmRealizado, cpc: d.kpis.cpc }} />
           </div>
         </div>
       </main>

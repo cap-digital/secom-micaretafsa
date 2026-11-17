@@ -85,11 +85,8 @@ export function Hero({ p, projeto }: { p: DashboardPayload["progresso"]; projeto
         </p>
         <div>
           <BarraProgresso pct={p.pctInvestido} pctIdeal={p.pctIdeal} cor={COR.laranja} rotulo="Investido do contratado" />
-          <p className="num fs-mini flex flex-wrap justify-between gap-x-2 text-texto-3">
-            <span>
-              <strong className="text-texto">{fmtPct(p.pctInvestido)}</strong> do contratado
-            </span>
-            <span>ideal hoje {fmtBRL0(p.idealAteHoje)}</span>
+          <p className="num fs-mini text-texto-3">
+            <strong className="text-texto">{fmtPct(p.pctInvestido)}</strong> do contratado
           </p>
         </div>
       </CardHero>
@@ -98,9 +95,6 @@ export function Hero({ p, projeto }: { p: DashboardPayload["progresso"]; projeto
         <Numero valor={p.cpmRealizado} formato="brl" className="font-display fs-kpi font-extrabold text-texto" />
         <p className="num fs-mini text-texto-2">
           contratado <strong className="text-texto">{fmtBRL(p.cpmContratado)}</strong>
-        </p>
-        <p className="fs-mini text-texto-3">
-          {varCpm === null ? "aguardando entrega" : varCpm <= 0 ? "abaixo do contratado: mais impressões por real" : "acima do contratado"}
         </p>
       </CardHero>
 

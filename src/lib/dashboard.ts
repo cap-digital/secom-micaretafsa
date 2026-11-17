@@ -147,6 +147,7 @@ function paraLinhas(m: Map<string, Acumulado>, ordem?: string[]): (LinhaRecorte 
       pct: totalImp > 0 ? (a.impressoes / totalImp) * 100 : 0,
       cpm: a.impressoes > 0 ? investido / (a.impressoes / 1000) : null,
       ctr: a.impressoes > 0 ? (a.cliques / a.impressoes) * 100 : null,
+      cpc: a.cliques > 0 ? investido / a.cliques : null,
     };
   });
 }

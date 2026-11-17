@@ -6,27 +6,27 @@
  */
 
 export type StatusRitmo = "No ritmo" | "Acima" | "Abaixo";
-export type Preset = "ontem" | "7d" | "tudo" | "personalizado";
-
+/** Período exibido: sempre a campanha inteira (início da estratégia → hoje ou data_fim). */
 export interface Periodo {
   de: string;
   ate: string;
-  preset: Preset;
-  /** limites selecionáveis (período do projeto) */
-  minimo: string;
-  maximo: string;
-  hoje: string;
 }
 
 export interface DiaSerie {
   data: string;
-  investido: number | null;
+  investido: number;
   impressoes: number | null;
   cliques: number | null;
-  futuro: boolean;
 }
 
-/** Linha de um recorte (gênero, idade, município). */
+/** Ritmo: impressões acumuladas × meta esperada acumulada (período inteiro). */
+export interface PontoRitmo {
+  data: string;
+  acumulado: number | null;
+  esperado: number;
+}
+
+/** Linha de um recorte (gênero, idade). */
 export interface LinhaRecorte {
   chave: string;
   rotulo: string;
@@ -39,15 +39,9 @@ export interface LinhaRecorte {
   ctr: number | null;
 }
 
-/** Resumo da área segmentada (aba "Locais" do Google): só entregas, sem dinheiro. */
-export interface ResumoGeo {
-  /** PRESENCE_OR_INTEREST | PRESENCE */
-  tipoGeo: string | null;
-  locais: { chave: string; rotulo: string; ativo: boolean; impressoes: number; cliques: number }[];
-}
-
 export interface CriativoPayload {
   chave: string;
+  /** nome limpo (sem prefixo de PI e sem extensão) */
   nome: string;
   formato: string;
   largura: number | null;
@@ -59,6 +53,8 @@ export interface CriativoPayload {
   cliques: number;
   ctr: number | null;
   investido: number;
+  cpc: number | null;
+  cpm: number | null;
 }
 
 export interface DashboardPayload {
@@ -75,7 +71,7 @@ export interface DashboardPayload {
     status: string;
     encerrado: boolean;
   };
-  /** KPIs do intervalo filtrado */
+  /** KPIs da campanha até hoje */
   kpis: {
     investido: number;
     contratado: number;
@@ -87,7 +83,20 @@ export interface DashboardPayload {
     ctr: number | null;
     aguardandoDados: boolean;
   };
-  /** Progresso da meta — sempre sobre o período inteiro */
+  /** Métricas complementares da campanha até hoje */
+  complementares: {
+    alcance: number | null;
+    frequencia: number | null;
+    cliques: number | null;
+    ctr: number | null;
+    cpc: number | null;
+    impressoesVisiveis: number | null;
+    /** visíveis ÷ mensuráveis × 100 */
+    taxaVisibilidade: number | null;
+    /** investido bruto ÷ (alcance ÷ 1000) */
+    cpmAlcance: number | null;
+  };
+  /** Contrato — meta, pacing e saldo sobre o período contratado */
   progresso: {
     kpi: string;
     meta: number;
@@ -104,11 +113,14 @@ export interface DashboardPayload {
     diasPassados: number;
     diasRestantes: number;
     brutoPorDiaNecessario: number;
+    cpmRealizado: number | null;
+    cpmContratado: number | null;
   };
-  /** dias do intervalo filtrado */
+  /** dias da campanha até hoje (regra 5.4) */
   serie: DiaSerie[];
+  /** ritmo de impressões acumuladas no período inteiro */
+  ritmo: PontoRitmo[];
   publico: { genero: LinhaRecorte[]; idade: LinhaRecorte[] };
-  pracas: { linhas: LinhaRecorte[]; resumo: ResumoGeo | null };
   criativos: CriativoPayload[];
 }
 

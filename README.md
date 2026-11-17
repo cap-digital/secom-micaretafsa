@@ -18,14 +18,13 @@ npm run check                # testes das regras de cálculo
 - `src/lib/google-ads.ts` — Google Ads REST (OAuth refresh token + MCC, cache ≤ 5 min)
 - `src/lib/calculos.ts` — regra de 3, tetos, centavos, pacing, checklist (puro, testado)
 - `src/lib/dashboard.ts` — orquestração; monta o payload só com valores BRUTOS
-- `src/lib/municipios.ts` + `src/config/municipios-br.json` — coordenadas dos municípios (base pública IBGE): distância até o centro do raio segmentado
-- `src/config/campanha.ts` — flags de exibição (`mostrarDemaisLocalidades`, `MAX_MUNICIPIOS_RAIO`)
-- `src/components/` — UI (Recharts no gráfico diário)
+- `src/lib/cores.ts` — paleta Micareta em HEX (cores dinâmicas sempre inline)
+- `src/components/` — UI (Recharts nos gráficos)
 
-Filtro de datas na URL (`?de=AAAA-MM-DD&ate=AAAA-MM-DD`), válido nas duas abas. O investido de um
-intervalo é a soma da série diária bruta (regra 5.4); criativos, gênero, idade e praças recebem esse
-valor proporcionalmente ao custo de cada linha (maiores restos), fechando ao centavo.
-
-Verificação de fechamento (só em `npm run dev`): `GET /api/interno/fechamento?de=…&ate=…`.
+O dashboard mostra sempre a campanha inteira (início da estratégia até hoje, ou até
+`data_fim`). A série diária segue a regra 5.4; criativos, gênero e idade recebem o
+investido proporcionalmente ao custo de cada linha (maiores restos), fechando ao centavo.
 
 Nenhum valor bruto, meta, data, status ou ID de campanha fica fixo no código.
+
+Verificação de fechamento (só em `npm run dev`): `GET /api/interno/fechamento`.

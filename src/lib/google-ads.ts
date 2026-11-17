@@ -79,6 +79,7 @@ async function gaql(env: EnvGoogle, customerId: string, query: string): Promise<
 }
 
 
+
 // ---------------------------------------------------------------------------
 // Tipos de retorno (servidor) — `custo` é GASTO DE PLATAFORMA: nunca exibir
 // ---------------------------------------------------------------------------
@@ -88,6 +89,9 @@ export interface DiaGoogle {
   custo: number;
   impressoes: number;
   cliques: number;
+  /** Active View: impressões visíveis e mensuráveis (null se a API não retornar) */
+  visiveis: number | null;
+  mensuraveis: number | null;
 }
 
 export interface MetricasLinha {
@@ -111,39 +115,6 @@ export interface LinhaSegmento extends MetricasLinha {
   tipo: string;
 }
 
-export interface CidadeGoogle extends MetricasLinha {
-  /** resource name do geo_target_constant (null = não identificado) */
-  geo: string | null;
-  /** criterion id do país (2076 = Brasil) */
-  pais: string | null;
-  nome: string | null;
-  canonico: string | null;
-}
-
-/** Critério de localização da campanha (aba "Locais"), com entrega do location_view. */
-export interface LocalSegmentado {
-  id: string;
-  tipo: "PROXIMITY" | "LOCATION" | string;
-  rotulo: string;
-  ativo: boolean;
-  impressoes: number;
-  cliques: number;
-}
-
-export interface Raio {
-  lat: number;
-  lng: number;
-  km: number;
-  endereco: string | null;
-}
-
-export interface SegmentacaoGeo {
-  /** PRESENCE_OR_INTEREST | PRESENCE | ... */
-  tipoGeo: string | null;
-  raios: Raio[];
-  locais: LocalSegmentado[];
-}
-
 export interface DiarioGoogle {
   dias: DiaGoogle[];
   buscadoEm: string;
@@ -153,8 +124,8 @@ export interface RecortesGoogle {
   anuncios: AnuncioGoogle[];
   genero: LinhaSegmento[];
   idade: LinhaSegmento[];
-  cidades: CidadeGoogle[];
-  segmentacao: SegmentacaoGeo;
+  /** pessoas únicas e frequência média no intervalo (null se indisponível) */
+  alcance: { usuarios: number; frequencia: number } | null;
   buscadoEm: string;
 }
 
@@ -172,8 +143,6 @@ const somar = (a: MetricasLinha, b: MetricasLinha) => {
   a.cliques += b.cliques;
   a.custo += b.custo;
 };
-
-const fmtKm = (km: number) => (Number.isInteger(km) ? String(km) : km.toFixed(1).replace(".", ","));
 
 function dimensoesDoNome(nome: string): { w: number; h: number } | null {
   const m = nome.match(/(\d{2,4})\s*x\s*(\d{2,4})/i);
@@ -208,16 +177,38 @@ export async function buscarGoogleDiario(
 
   const env = envObrigatorio();
   const { where } = filtros(campaignIds, desde, ate);
-  const linhas = await gaql(
-    env,
-    customerId,
-    `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks FROM campaign WHERE ${where}`,
-  );
+  let comActiveView = true;
+  let linhas: any[];
+  try {
+    linhas = await gaql(
+      env,
+      customerId,
+      `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks,
+              metrics.active_view_impressions, metrics.active_view_measurable_impressions
+       FROM campaign WHERE ${where}`,
+    );
+  } catch {
+    comActiveView = false;
+    linhas = await gaql(
+      env,
+      customerId,
+      `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks FROM campaign WHERE ${where}`,
+    );
+  }
   const porDia = new Map<string, DiaGoogle>();
   for (const r of linhas) {
     const data = r.segments?.date as string;
-    const d = porDia.get(data) ?? { data, custo: 0, impressoes: 0, cliques: 0 };
+    const d = porDia.get(data) ?? {
+      data,
+      custo: 0,
+      impressoes: 0,
+      cliques: 0,
+      visiveis: comActiveView ? 0 : null,
+      mensuraveis: comActiveView ? 0 : null,
+    };
     somar(d, metricas(r));
+    if (d.visiveis !== null) d.visiveis += n(r.metrics?.activeViewImpressions);
+    if (d.mensuraveis !== null) d.mensuraveis += n(r.metrics?.activeViewMeasurableImpressions);
     porDia.set(data, d);
   }
   return {
@@ -227,12 +218,8 @@ export async function buscarGoogleDiario(
 }
 
 // ---------------------------------------------------------------------------
-// Recortes — intervalo filtrado (criativos, gênero, idade, cidades)
+// Recortes — intervalo filtrado (criativos, gênero, idade, alcance)
 // ---------------------------------------------------------------------------
-
-const BRASIL = "2076";
-/** geo_target_constant por consulta (IN) ao resolver nomes. */
-const LOTE_GEO = 300;
 
 export async function buscarGoogleRecortes(
   customerId: string,
@@ -245,9 +232,8 @@ export async function buscarGoogleRecortes(
 
   const env = envObrigatorio();
   const { ids, where } = filtros(campaignIds, desde, ate);
-  const soCampanha = `campaign.id IN (${ids.join(",")})`;
 
-  const [linhasAd, linhasGenero, linhasIdade, linhasLocal, linhasConfig, linhasCriterios, linhasLocais] = await Promise.all([
+  const [linhasAd, linhasGenero, linhasIdade, linhasAlcance] = await Promise.all([
     gaql(
       env,
       customerId,
@@ -270,36 +256,14 @@ export async function buscarGoogleRecortes(
       `SELECT ad_group_criterion.age_range.type, metrics.impressions, metrics.clicks, metrics.cost_micros
        FROM age_range_view WHERE ${where}`,
     ).catch(() => []),
-    gaql(
-      env,
-      customerId,
-      `SELECT campaign.id, user_location_view.country_criterion_id, segments.geo_target_city,
-              metrics.impressions, metrics.clicks, metrics.cost_micros
-       FROM user_location_view WHERE ${where}`,
-    ).catch(() => []),
-    gaql(
-      env,
-      customerId,
-      `SELECT campaign.geo_target_type_setting.positive_geo_target_type FROM campaign WHERE ${soCampanha}`,
-    ).catch(() => []),
-    gaql(
-      env,
-      customerId,
-      `SELECT campaign_criterion.criterion_id, campaign_criterion.type, campaign_criterion.negative,
-              campaign_criterion.proximity.radius, campaign_criterion.proximity.radius_units,
-              campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
-              campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
-              campaign_criterion.proximity.address.street_address, campaign_criterion.proximity.address.city_name,
-              campaign_criterion.location.geo_target_constant
-       FROM campaign_criterion
-       WHERE ${soCampanha} AND campaign_criterion.type IN (LOCATION, PROXIMITY) AND campaign_criterion.status != REMOVED`,
-    ).catch(() => []),
-    gaql(
-      env,
-      customerId,
-      `SELECT campaign_criterion.criterion_id, campaign_criterion.type, metrics.impressions, metrics.clicks
-       FROM location_view WHERE ${where}`,
-    ).catch(() => []),
+    // alcance não é somável entre campanhas: só consulta com 1 campanha
+    ids.length === 1
+      ? gaql(
+          env,
+          customerId,
+          `SELECT metrics.unique_users, metrics.average_impression_frequency_per_user FROM campaign WHERE ${where}`,
+        ).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   // --- Gênero / idade (agrupados pelo tipo) ---
@@ -316,101 +280,10 @@ export async function buscarGoogleRecortes(
   const genero = agrupar(linhasGenero, (r) => r.adGroupCriterion?.gender?.type);
   const idade = agrupar(linhasIdade, (r) => r.adGroupCriterion?.ageRange?.type);
 
-  // --- Cidades (localização física do usuário) ---
-  const porCidade = new Map<string, CidadeGoogle>();
-  for (const r of linhasLocal) {
-    const geo = (r.segments?.geoTargetCity as string | undefined) ?? null;
-    const pais = r.userLocationView?.countryCriterionId ? String(r.userLocationView.countryCriterionId) : null;
-    const k = geo ?? "—";
-    const c = porCidade.get(k) ?? { geo, pais, nome: null, canonico: null, impressoes: 0, cliques: 0, custo: 0 };
-    somar(c, metricas(r));
-    porCidade.set(k, c);
-  }
-  const cidades = [...porCidade.values()].sort((a, b) => b.impressoes - a.impressoes);
-  // --- Critérios de localização (raio / locais) e tipo de segmentação geográfica ---
-  const tipoGeo: string | null =
-    linhasConfig[0]?.campaign?.geoTargetTypeSetting?.positiveGeoTargetType ?? null;
-  const raios: Raio[] = [];
-  const ativos = new Map<string, { tipo: string; rotulo: string | null; geo: string | null }>();
-  for (const r of linhasCriterios) {
-    const cc = r.campaignCriterion ?? {};
-    if (cc.negative) continue;
-    const id = String(cc.criterionId);
-    if (cc.type === "PROXIMITY" && cc.proximity) {
-      const px = cc.proximity;
-      const km = n(px.radius) * (px.radiusUnits === "MILES" ? 1.609344 : 1);
-      const endereco = px.address?.streetAddress || px.address?.cityName || null;
-      raios.push({
-        lat: n(px.geoPoint?.latitudeInMicroDegrees) / 1e6,
-        lng: n(px.geoPoint?.longitudeInMicroDegrees) / 1e6,
-        km,
-        endereco,
-      });
-      ativos.set(id, { tipo: "PROXIMITY", rotulo: `Raio de ${fmtKm(km)} km${endereco ? ` · ${endereco}` : ""}`, geo: null });
-    } else if (cc.type === "LOCATION") {
-      ativos.set(id, { tipo: "LOCATION", rotulo: null, geo: cc.location?.geoTargetConstant ?? `geoTargetConstants/${id}` });
-    }
-  }
-  const locaisMap = new Map<string, LocalSegmentado>();
-  for (const r of linhasLocais) {
-    const cc = r.campaignCriterion ?? {};
-    const id = String(cc.criterionId);
-    const l = locaisMap.get(id) ?? {
-      id,
-      tipo: String(cc.type ?? ""),
-      rotulo: ativos.get(id)?.rotulo ?? "",
-      ativo: ativos.has(id),
-      impressoes: 0,
-      cliques: 0,
-    };
-    l.impressoes += n(r.metrics?.impressions);
-    l.cliques += n(r.metrics?.clicks);
-    locaisMap.set(id, l);
-  }
-  for (const [id, a] of ativos)
-    if (!locaisMap.has(id)) locaisMap.set(id, { id, tipo: a.tipo, rotulo: a.rotulo ?? "", ativo: true, impressoes: 0, cliques: 0 });
-
-  // --- Nomes: todas as cidades do Brasil + critérios LOCATION (lotes) ---
-  const geosLocais = [...locaisMap.values()]
-    .filter((l) => l.tipo === "LOCATION")
-    .map((l) => ativos.get(l.id)?.geo ?? `geoTargetConstants/${l.id}`);
-  const aResolver = [
-    ...new Set([...cidades.filter((c) => c.geo && c.pais === BRASIL).map((c) => c.geo!), ...geosLocais]),
-  ];
-  const info = new Map<string, { name?: string; canonicalName?: string }>();
-  for (let i = 0; i < aResolver.length; i += LOTE_GEO) {
-    const lote = aResolver.slice(i, i + LOTE_GEO);
-    try {
-      const geos = await gaql(
-        env,
-        customerId,
-        `SELECT geo_target_constant.resource_name, geo_target_constant.name, geo_target_constant.canonical_name
-         FROM geo_target_constant
-         WHERE geo_target_constant.resource_name IN (${lote.map((g) => `'${g}'`).join(",")})`,
-      );
-      for (const g of geos) info.set(g.geoTargetConstant?.resourceName, g.geoTargetConstant);
-    } catch {
-      /* lote sem nome: cidades entram em "Demais localidades" */
-    }
-  }
-  for (const c of cidades) {
-    const g = c.geo ? info.get(c.geo) : undefined;
-    if (g) {
-      c.nome = g.name ?? null;
-      c.canonico = g.canonicalName ?? null;
-    }
-  }
-  for (const l of locaisMap.values()) {
-    if (l.tipo !== "LOCATION") continue;
-    const g = info.get(ativos.get(l.id)?.geo ?? `geoTargetConstants/${l.id}`);
-    l.rotulo = g?.canonicalName ?? g?.name ?? `Local ${l.id}`;
-  }
-  for (const l of locaisMap.values()) if (!l.rotulo) l.rotulo = l.tipo === "PROXIMITY" ? "Raio" : `Local ${l.id}`;
-  const segmentacao: SegmentacaoGeo = {
-    tipoGeo,
-    raios,
-    locais: [...locaisMap.values()].sort((a, b) => Number(b.ativo) - Number(a.ativo) || b.impressoes - a.impressoes),
-  };
+  const a = linhasAlcance[0]?.metrics;
+  const alcance = a?.uniqueUsers
+    ? { usuarios: n(a.uniqueUsers), frequencia: n(a.averageImpressionFrequencyPerUser) }
+    : null;
 
   // --- Anúncios (+ assets dos responsivos) ---
   const assetsPorAd = new Map<string, string[]>();
@@ -431,12 +304,12 @@ export async function buscarGoogleRecortes(
         customerId,
         `SELECT asset.resource_name, asset.image_asset.full_size.url,
                 asset.image_asset.full_size.width_pixels, asset.image_asset.full_size.height_pixels
-         FROM asset WHERE asset.resource_name IN (${todosAssets.map((a) => `'${a}'`).join(",")})`,
+         FROM asset WHERE asset.resource_name IN (${todosAssets.map((x) => `'${x}'`).join(",")})`,
       );
-      for (const a of linhasAsset) {
-        const fs = a.asset?.imageAsset?.fullSize;
+      for (const x of linhasAsset) {
+        const fs = x.asset?.imageAsset?.fullSize;
         if (fs?.url)
-          assetInfo.set(a.asset.resourceName, {
+          assetInfo.set(x.asset.resourceName, {
             url: fs.url,
             w: fs.widthPixels ? n(fs.widthPixels) : null,
             h: fs.heightPixels ? n(fs.heightPixels) : null,
@@ -457,7 +330,7 @@ export async function buscarGoogleRecortes(
       let largura: number | null = ad.imageAd?.pixelWidth ? n(ad.imageAd.pixelWidth) : null;
       let altura: number | null = ad.imageAd?.pixelHeight ? n(ad.imageAd.pixelHeight) : null;
       if (!imagemUrl) {
-        const primeiro = (assetsPorAd.get(id) ?? []).map((a) => assetInfo.get(a)).find(Boolean);
+        const primeiro = (assetsPorAd.get(id) ?? []).map((x) => assetInfo.get(x)).find(Boolean);
         if (primeiro) {
           imagemUrl = primeiro.url;
           largura = largura ?? primeiro.w;
@@ -491,8 +364,7 @@ export async function buscarGoogleRecortes(
     anuncios: [...anuncios.values()],
     genero,
     idade,
-    cidades,
-    segmentacao,
+    alcance,
     buscadoEm: new Date().toISOString(),
   };
 }

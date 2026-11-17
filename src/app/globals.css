@@ -1,87 +1,127 @@
 @import "tailwindcss";
 
 /*
- * Identidade Micareta de Feira 2026 (paleta extraída dos prints oficiais):
- *  azul royal #2F6DB5 (principal dos dados: barras, linhas, aba ativa)
- *  laranja #E0702A (secundária) · laranja-escuro #C85A1E (detalhes)
- *  amarelo-ouro #F0C848 (só badges e destaques) · azul-céu #47AAE5
- *  degradê do header #E8B141 → #E58038 (fundo do print)
- * Par categórico validado (CVD + contraste, texto branco ≥ 4,2:1): #2F6DB5 + #C85A1E.
+ * Identidade Micareta de Feira 2026 (paleta dos prints oficiais).
+ * Cores DINÂMICAS (barras, larguras, séries) usam HEX inline via src/lib/cores.ts;
+ * as variáveis abaixo servem só para classes estáticas.
  */
 :root {
-  --fundo: #f4f5f7;
-  --card: #ffffff;
-  --borda: #e5e7eb;
-  --trilho: #e8eaee;
-  --texto: #18181b;
-  --texto-2: #5b5f6b;
-  --texto-3: #8b8f9a;
+  --card: #f6f5f3;
+  --borda: #e8e4de;
+  --texto: #1f1a17;
+  --texto-2: #5e5750;
+  --texto-3: #8a847c;
   --azul: #2f6db5;
-  --azul-suave: #e8f0fa;
-  --azul-ceu: #47aae5;
+  --azul-escuro: #1e4e9c;
+  --azul-suave: #e6eef8;
   --laranja: #e0702a;
   --laranja-escuro: #c85a1e;
-  --laranja-suave: #fdeee4;
+  --laranja-suave: #fce9dc;
   --amarelo: #f0c848;
-  --amarelo-suave: #fdf4d6;
-  --neutro: #d4d6db;
-  --degrade-topo: #e8b141;
-  --degrade-base: #e58038;
+  --sobre-laranja: #3a1a06;
   color-scheme: light;
 }
 
 @theme inline {
-  --color-fundo: var(--fundo);
   --color-card: var(--card);
   --color-borda: var(--borda);
-  --color-trilho: var(--trilho);
   --color-texto: var(--texto);
   --color-texto-2: var(--texto-2);
   --color-texto-3: var(--texto-3);
   --color-azul: var(--azul);
+  --color-azul-escuro: var(--azul-escuro);
   --color-azul-suave: var(--azul-suave);
-  --color-azul-ceu: var(--azul-ceu);
   --color-laranja: var(--laranja);
   --color-laranja-escuro: var(--laranja-escuro);
   --color-laranja-suave: var(--laranja-suave);
   --color-amarelo: var(--amarelo);
-  --color-amarelo-suave: var(--amarelo-suave);
-  --color-neutro: var(--neutro);
+  --color-sobre-laranja: var(--sobre-laranja);
   --font-sans: var(--font-corpo);
+  --font-display: var(--font-display);
 }
 
-html,
+html {
+  background: #e2702c;
+}
 body {
-  background: var(--fundo);
   color: var(--texto);
-}
-
-body {
   font-family: var(--font-corpo), system-ui, sans-serif;
 }
 
 .num {
   font-variant-numeric: tabular-nums;
 }
+.font-display {
+  font-family: var(--font-display), var(--font-corpo), system-ui, sans-serif;
+}
 
-/* rótulo pequeno padrão dos cards */
+/* label pequeno em caixa alta com tracking */
 .rotulo {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--texto-2);
 }
 
-/* faixa do header: degradê do print + textura leve de pontos */
-.faixa-micareta {
-  background: linear-gradient(180deg, var(--degrade-topo) 0%, var(--degrade-base) 100%);
+/* ---------- fundo fixo: degradê quente + raios de sol + confetes ---------- */
+.fundo-micareta {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -8%, rgb(255 246 214 / 0.55), transparent 62%),
+    repeating-conic-gradient(from -90deg at 50% -6%, rgb(255 255 255 / 0.075) 0deg 5deg, transparent 5deg 13deg),
+    linear-gradient(180deg, #f3c34a 0%, #ef9d3b 38%, #e5762e 70%, #c9551f 100%);
 }
-.faixa-micareta-textura {
-  background-image:
-    radial-gradient(rgb(255 255 255 / 0.22) 1.3px, transparent 1.5px),
-    radial-gradient(rgb(255 255 255 / 0.12) 1px, transparent 1.2px);
-  background-size: 22px 22px, 22px 22px;
-  background-position: 0 0, 11px 11px;
-  /* a textura some atrás do logo, que tem o fundo liso do print */
-  mask-image: linear-gradient(90deg, transparent 0, transparent 220px, #000 380px);
+
+/* ---------- header azul royal com raios em azul claro ---------- */
+.faixa-azul {
+  background:
+    repeating-conic-gradient(from 0deg at 8% 140%, rgb(120 175 240 / 0.16) 0deg 5deg, transparent 5deg 12deg),
+    radial-gradient(ellipse 60% 120% at 92% 0%, rgb(71 170 229 / 0.35), transparent 60%),
+    linear-gradient(100deg, #1e4e9c 0%, #2f6db5 100%);
+}
+
+/* ---------- cards ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid rgb(255 255 255 / 0.65);
+  border-radius: 22px;
+  box-shadow:
+    0 1px 2px rgb(90 35 0 / 0.08),
+    0 12px 32px -12px rgb(90 35 0 / 0.35);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 2px 4px rgb(90 35 0 / 0.1),
+      0 18px 40px -12px rgb(90 35 0 / 0.42);
+  }
+}
+
+/* ---------- barras animando da esquerda para a direita ---------- */
+@keyframes crescer {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.barra-anim {
+  transform-origin: left center;
+  animation: crescer 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-anim {
+    animation: none;
+  }
+  .card,
+  .card:hover {
+    transition: none;
+    transform: none;
+  }
 }

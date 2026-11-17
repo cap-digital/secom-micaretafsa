@@ -15,26 +15,20 @@ import {
   converterEstrategia,
   custoPorResultado,
   deCentavos,
-  diffDias,
   distribuirMaioresRestos,
   intervaloDatas,
   paraCentavos,
   pctMeta,
   rodarChecklist,
-  somarIntervalo,
   statusRitmo,
   type EstrategiaParaChecklist,
 } from "./calculos";
-import { localizarMunicipio } from "./municipios";
-import { CRIATIVOS_LOCAIS, MAX_MUNICIPIOS_RAIO, mostrarDemaisLocalidades } from "@/config/campanha";
+import { CRIATIVOS_LOCAIS } from "@/config/campanha";
 import type {
   CriativoPayload,
   DashboardPayload,
   LinhaRecorte,
-  Periodo,
-  Preset,
   ResultadoDashboard,
-  ResumoGeo,
 } from "./tipos";
 
 /**
@@ -42,14 +36,14 @@ import type {
  * apenas o payload BRUTO para a tela. Todo cálculo é refeito a cada leitura;
  * só os dados crus das APIs têm cache (máx. 5 min).
  *
- * Filtro de datas: a série diária bruta é SEMPRE calculada sobre o período
- * inteiro (regra 5.4); o investido de um intervalo é a soma desses dias.
- * Os recortes (criativos, gênero, idade, praças) recebem o investido do
- * intervalo proporcionalmente ao custo de cada linha (maiores restos).
+ * Período exibido: sempre a campanha inteira (início da estratégia até hoje,
+ * ou até data_fim). A série diária bruta segue a regra 5.4 e os recortes
+ * (criativos, gênero, idade) recebem o investido proporcionalmente ao custo
+ * de cada linha (maiores restos), fechando ao centavo.
  */
 
-// Último payload válido por intervalo (memória do processo).
-const ultimosValidos = new Map<string, DashboardPayload>();
+// Último payload que passou no checklist (memória do processo).
+let ultimoValido: DashboardPayload | null = null;
 
 const FUSO = "America/Bahia";
 
@@ -62,36 +56,18 @@ function horaBahia(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }
 
-function somarDias(iso: string, n: number): string {
-  const t = Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) + n * 86_400_000;
-  return new Date(t).toISOString().slice(0, 10);
-}
-
 const minData = (a: string, b: string) => (a < b ? a : b);
-const maxData = (a: string, b: string) => (a > b ? a : b);
-const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Intervalo pedido na URL, limitado ao período do projeto. Padrão: período todo. */
-export function resolverPeriodo(
-  de: string | undefined,
-  ate: string | undefined,
-  inicio: string,
-  fim: string,
-  hoje: string,
-): Periodo {
-  const limitar = (d: string) => minData(fim, maxData(inicio, d));
-  let a = de && DATA_ISO.test(de) ? limitar(de) : inicio;
-  let b = ate && DATA_ISO.test(ate) ? limitar(ate) : fim;
-  if (a > b) [a, b] = [b, a];
-
-  const ontem = limitar(somarDias(hoje, -1));
-  const seteDe = limitar(somarDias(hoje, -6));
-  const seteAte = limitar(hoje);
-  let preset: Preset = "personalizado";
-  if (a === inicio && b === fim) preset = "tudo";
-  else if (a === ontem && b === ontem) preset = "ontem";
-  else if (a === seteDe && b === seteAte) preset = "7d";
-  return { de: a, ate: b, preset, minimo: inicio, maximo: fim, hoje };
+/** "126955---BNI-300x250px-MICARETA-DE-FEIRA-SEADES26 (1).gif" → "300x250px-MICARETA-DE-FEIRA-SEADES26" */
+export function nomeLimpo(nome: string): string {
+  return (
+    nome
+      .replace(/\.(gif|png|jpe?g|webp|html?|zip)$/i, "")
+      .replace(/\s*\(\d+\)$/, "")
+      .replace(/\.(gif|png|jpe?g|webp|html?|zip)$/i, "")
+      .replace(/^\d+-+[A-Z]{2,5}-+/i, "")
+      .trim() || nome
+  );
 }
 
 function nomeProjeto(nome: string): string {
@@ -116,20 +92,11 @@ const ROTULO_IDADE: Record<string, string> = {
 };
 const ORDEM_IDADE = Object.keys(ROTULO_IDADE);
 
-/** Distância em km entre dois pontos (haversine). */
-function distanciaKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const rad = (g: number) => (g * Math.PI) / 180;
-  const dLat = rad(lat2 - lat1);
-  const dLng = rad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(a));
-}
 
 interface EstrategiaCalculada {
   cap: EstrategiaCap;
   valorBrutoCent: number;
   investidoCent: number;
-  periodoCent: number;
   diasCent: Map<string, number>;
   fechado: boolean;
   aguardandoDados: boolean;
@@ -185,13 +152,12 @@ function paraLinhas(m: Map<string, Acumulado>, ordem?: string[]): (LinhaRecorte 
 }
 const semCent = ({ cent: _c, ...l }: LinhaRecorte & { cent: number }): LinhaRecorte => l; // eslint-disable-line @typescript-eslint/no-unused-vars
 
-function fallback(chave: string, motivo: string): ResultadoDashboard {
-  const ultimo = ultimosValidos.get(chave);
-  if (ultimo) return { estado: "ok", payload: ultimo, aviso: "Exibindo o último dado validado." };
+function fallback(motivo: string): ResultadoDashboard {
+  if (ultimoValido) return { estado: "ok", payload: ultimoValido, aviso: "Exibindo o último dado validado." };
   return { estado: "vazio", titulo: "Dados em atualização", mensagem: motivo };
 }
 
-export async function carregarDashboard(filtro: { de?: string; ate?: string } = {}): Promise<ResultadoDashboard> {
+export async function carregarDashboard(): Promise<ResultadoDashboard> {
   const cap = envCap();
   if (!cap) {
     return {
@@ -200,7 +166,6 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
       mensagem: "A conexão com os dados do projeto ainda não foi configurada.",
     };
   }
-  const chaveFiltro = `${filtro.de ?? ""}|${filtro.ate ?? ""}`;
 
   // 1. cap-manager
   let projeto: ProjetoCap;
@@ -211,13 +176,12 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
     capBuscadoEm = r.buscadoEm;
   } catch (e) {
     logServidor("error", `falha no cap-manager: ${(e as Error).message}`);
-    return fallback(chaveFiltro, "Não foi possível ler os dados do projeto agora. Tentaremos novamente em instantes.");
+    return fallback("Não foi possível ler os dados do projeto agora. Tentaremos novamente em instantes.");
   }
 
   const hoje = hojeBahia();
   const p = projeto.projeto;
   const encerrado = hoje > p.data_fim || p.campanha_finalizada;
-  const periodo = resolverPeriodo(filtro.de, filtro.ate, p.data_inicio, p.data_fim, hoje);
   const ativas = projeto.estrategias.filter((e) => e.status !== "cancelada");
   const piCent = projeto.tipo === "td" && projeto.pi ? paraCentavos(projeto.pi.valor_bruto) : null;
 
@@ -234,7 +198,6 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
   const google = envGoogle();
   const calculadas: EstrategiaCalculada[] = [];
   const instantes: string[] = [capBuscadoEm];
-  const fimRecortes = minData(periodo.ate, hoje);
 
   for (let i = 0; i < ativas.length; i++) {
     const e = ativas[i];
@@ -251,13 +214,10 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
     }
     if (consultaGoogle) {
       const ids = [e.campaign_id!, ...e.campanhas_adicionais];
-      const deRecortes = maxData(periodo.de, e.data_inicio);
       try {
         const [d, r] = await Promise.all([
           buscarGoogleDiario(e.id_conta!, ids, datas[0], datas[datas.length - 1]),
-          deRecortes <= fimRecortes
-            ? buscarGoogleRecortes(e.id_conta!, ids, deRecortes, fimRecortes)
-            : Promise.resolve(null),
+          buscarGoogleRecortes(e.id_conta!, ids, datas[0], datas[datas.length - 1]),
         ]);
         diario = d;
         recortes = r;
@@ -265,7 +225,7 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
         if (r) instantes.push(r.buscadoEm);
       } catch (err) {
         logServidor("error", `falha no Google Ads (estratégia ${e.id}): ${(err as Error).message}`);
-        if (ultimosValidos.has(chaveFiltro)) return fallback(chaveFiltro, "");
+        if (ultimoValido) return fallback("");
         diario = null;
         recortes = null;
       }
@@ -287,7 +247,6 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
       cap: e,
       valorBrutoCent,
       investidoCent: semDados ? 0 : conv.investidoCent,
-      periodoCent: somarIntervalo(diasCent, periodo.de, periodo.ate),
       diasCent,
       fechado,
       aguardandoDados,
@@ -330,49 +289,45 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
   const pacing = calcularPacing(contratadoCent, investidoTotalCent, inicioRitmo, p.data_fim, hoje);
   const ritmo = encerrado ? "No ritmo" : statusRitmo(investidoTotalCent, pacing.idealAteHojeCent);
 
-  // 6. KPIs do intervalo filtrado
-  const periodoCent = calculadas.reduce((a, c) => a + c.periodoCent, 0);
-  const impPeriodo = aguardando ? null : somaDiario(comDados, "impressoes", periodo.de, periodo.ate);
-  const cliPeriodo = aguardando ? null : somaDiario(comDados, "cliques", periodo.de, periodo.ate);
+  // 6. KPIs da campanha até hoje (período exibido = início da estratégia → hoje/data_fim)
+  const fimExibido = minData(hoje, p.data_fim);
+  const periodo = { de: inicioRitmo, ate: fimExibido < inicioRitmo ? inicioRitmo : fimExibido };
+  const periodoCent = investidoTotalCent;
+  const impPeriodo = aguardando ? null : somaDiario(comDados, "impressoes");
+  const cliPeriodo = aguardando ? null : somaDiario(comDados, "cliques");
   const investidoPeriodo = deCentavos(periodoCent);
   const impKpiPeriodo = doKpi.some((c) => c.diario)
     ? somaDiario(
         doKpi.filter((c) => c.diario),
         "impressoes",
-        periodo.de,
-        periodo.ate,
       )
     : null;
-  const periodoKpiCent = doKpi.reduce((a, c) => a + c.periodoCent, 0);
+  const periodoKpiCent = doKpi.reduce((a, c) => a + c.investidoCent, 0);
 
-  // 7. Série diária do intervalo (futuros vazios)
+  // 7. Série diária da campanha até hoje (regra 5.4)
   const serie = intervaloDatas(periodo.de, periodo.ate).map((data) => {
-    const futuro = data > hoje;
-    if (futuro) return { data, investido: null, impressoes: null, cliques: null, futuro };
     const cent = calculadas.reduce((a, c) => a + (c.diasCent.get(data) ?? 0), 0);
     const dia = (campo: "impressoes" | "cliques") =>
       comDados.length
         ? comDados.reduce((a, c) => a + (c.diario!.dias.find((d) => d.data === data)?.[campo] ?? 0), 0)
         : null;
-    return { data, investido: deCentavos(cent), impressoes: dia("impressoes"), cliques: dia("cliques"), futuro };
+    return { data, investido: deCentavos(cent), impressoes: dia("impressoes"), cliques: dia("cliques") };
   });
 
   // 8. Recortes — investido do intervalo distribuído pelo custo de cada linha
   const accCriativos = new Map<string, Acumulado & { info: RecortesGoogle["anuncios"][number] }>();
   const accGenero = new Map<string, Acumulado>();
   const accIdade = new Map<string, Acumulado>();
-  const accCidades = new Map<string, Acumulado>();
-  const geoInfo = new Map<string, { nome: string | null; canonico: string | null }>();
-  const esperado = { criativos: 0, genero: 0, idade: 0, cidades: 0 };
+  const esperado = { criativos: 0, genero: 0, idade: 0 };
 
   for (const c of calculadas) {
     const r = c.recortes;
     if (!r) continue;
     const anuncios = r.anuncios.filter((a) => a.impressoes > 0 || a.custo > 0);
     if (anuncios.length) {
-      esperado.criativos += c.periodoCent;
+      esperado.criativos += c.investidoCent;
       const partes = distribuirMaioresRestos(
-        c.periodoCent,
+        c.investidoCent,
         anuncios.map((a) => a.custo),
       );
       anuncios.forEach((a, i) => {
@@ -381,98 +336,23 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
       });
     }
     if (r.genero.length) {
-      esperado.genero += c.periodoCent;
-      acumular(accGenero, r.genero, c.periodoCent, (l) => l.tipo, (l) => ROTULO_GENERO[l.tipo] ?? l.tipo);
+      esperado.genero += c.investidoCent;
+      acumular(accGenero, r.genero, c.investidoCent, (l) => l.tipo, (l) => ROTULO_GENERO[l.tipo] ?? l.tipo);
     }
     if (r.idade.length) {
-      esperado.idade += c.periodoCent;
-      acumular(accIdade, r.idade, c.periodoCent, (l) => l.tipo, (l) => ROTULO_IDADE[l.tipo] ?? l.tipo);
-    }
-    if (r.cidades.length) {
-      esperado.cidades += c.periodoCent;
-      for (const cid of r.cidades) if (cid.geo && cid.nome) geoInfo.set(cid.geo, { nome: cid.nome, canonico: cid.canonico });
-      acumular(
-        accCidades,
-        r.cidades,
-        c.periodoCent,
-        (l) => l.geo ?? "nao-identificado",
-        (l) => l.nome ?? "",
-      );
+      esperado.idade += c.investidoCent;
+      acumular(accIdade, r.idade, c.investidoCent, (l) => l.tipo, (l) => ROTULO_IDADE[l.tipo] ?? l.tipo);
     }
   }
 
   const genero = paraLinhas(accGenero, ORDEM_GENERO);
   const idade = paraLinhas(accIdade, ORDEM_IDADE);
 
-  // Praças: municípios (base IBGE) dentro do raio segmentado da campanha, um a um;
-  // o resto (fora do raio, outros países, não identificado) vira "Demais localidades".
-  const raios = calculadas.flatMap((c) => c.recortes?.segmentacao.raios ?? []);
-  const dentroDoRaio = (lat: number, lng: number) =>
-    raios.some((r) => distanciaKm(r.lat, r.lng, lat, lng) <= r.km);
-  const accMunicipios = new Map<string, Acumulado & { dentro: boolean }>();
-  for (const [geo, a] of accCidades) {
-    const g = geoInfo.get(geo);
-    const mun = g ? localizarMunicipio(g.nome, g.canonico) : null;
-    const dentro = !!mun && (raios.length ? dentroDoRaio(mun.lat, mun.lng) : mun.uf === "BA");
-    const k = dentro && mun ? `mun:${mun.uf}:${mun.nome}` : "demais";
-    const rotulo = dentro && mun ? mun.nome : "Demais localidades";
-    const d = accMunicipios.get(k) ?? { rotulo, impressoes: 0, cliques: 0, cent: 0, dentro };
-    d.impressoes += a.impressoes;
-    d.cliques += a.cliques;
-    d.cent += a.cent;
-    accMunicipios.set(k, d);
-  }
-  const todasPracas = paraLinhas(accMunicipios);
-  const noRaio = todasPracas.filter((l) => l.chave !== "demais").sort((a, b) => b.impressoes - a.impressoes);
-  const demais = todasPracas.find((l) => l.chave === "demais");
-  const somarLinhas = (chave: string, rotulo: string, linhas: typeof todasPracas) => {
-    const imp = linhas.reduce((a, l) => a + l.impressoes, 0);
-    const cli = linhas.reduce((a, l) => a + l.cliques, 0);
-    const cent = linhas.reduce((a, l) => a + l.cent, 0);
-    const totalImp = todasPracas.reduce((a, l) => a + l.impressoes, 0);
-    const investido = deCentavos(cent);
-    return {
-      chave,
-      rotulo,
-      impressoes: imp,
-      cliques: cli,
-      investido,
-      cent,
-      pct: totalImp > 0 ? (imp / totalImp) * 100 : 0,
-      cpm: imp > 0 ? investido / (imp / 1000) : null,
-      ctr: imp > 0 ? (cli / imp) * 100 : null,
-    };
-  };
-  const pracasCompletas = noRaio.length > MAX_MUNICIPIOS_RAIO
-    ? [
-        ...noRaio.slice(0, MAX_MUNICIPIOS_RAIO - 1),
-        somarLinhas("outros-raio", `Outros ${noRaio.length - (MAX_MUNICIPIOS_RAIO - 1)} municípios do raio`, noRaio.slice(MAX_MUNICIPIOS_RAIO - 1)),
-      ]
-    : [...noRaio];
-  if (demais) pracasCompletas.push(demais);
-  const pracasVisiveis = mostrarDemaisLocalidades ? pracasCompletas : pracasCompletas.filter((l) => l.chave !== "demais");
-
-  const seg = calculadas.find((c) => c.recortes)?.recortes?.segmentacao ?? null;
-  const resumoGeo: ResumoGeo | null = seg
-    ? {
-        tipoGeo: seg.tipoGeo,
-        locais: calculadas.flatMap((c) =>
-          (c.recortes?.segmentacao.locais ?? []).map((l, i) => ({
-            chave: `${c.cap.id}:${i}`,
-            rotulo: l.rotulo,
-            ativo: l.ativo,
-            impressoes: l.impressoes,
-            cliques: l.cliques,
-          })),
-        ),
-      }
-    : null;
-
   const criativos: CriativoPayload[] = [...accCriativos.entries()].map(([, a], i) => {
     const formato = a.info.largura && a.info.altura ? `${a.info.largura}x${a.info.altura}` : "—";
     return {
       chave: `c${i}`,
-      nome: a.info.nome.replace(/\s*\(\d+\)(?=\.\w+$|$)/, ""),
+      nome: nomeLimpo(a.info.nome),
       formato,
       largura: a.info.largura,
       altura: a.info.altura,
@@ -483,7 +363,45 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
       cliques: a.cliques,
       ctr: a.impressoes > 0 ? (a.cliques / a.impressoes) * 100 : null,
       investido: deCentavos(a.cent),
+      cpc: a.cliques > 0 ? deCentavos(a.cent) / a.cliques : null,
+      cpm: a.impressoes > 0 ? deCentavos(a.cent) / (a.impressoes / 1000) : null,
     };
+  });
+
+  // 9. Métricas complementares (intervalo) e ritmo acumulado (período inteiro)
+  const somaAV = (campo: "visiveis" | "mensuraveis") => {
+    if (aguardando || comDados.some((c) => c.diario!.dias.some((d) => d[campo] === null))) return null;
+    return comDados.reduce(
+      (a, c) =>
+        a + c.diario!.dias.reduce((b, d) => b + (d[campo] ?? 0), 0),
+      0,
+    );
+  };
+  const visiveis = somaAV("visiveis");
+  const mensuraveis = somaAV("mensuraveis");
+  const comRecortes = calculadas.filter((c) => c.recortes);
+  const alcanceUnico = comRecortes.length === 1 ? comRecortes[0].recortes!.alcance : null;
+  const complementares: DashboardPayload["complementares"] = {
+    alcance: alcanceUnico?.usuarios ?? null,
+    frequencia: alcanceUnico?.frequencia ?? null,
+    cliques: cliPeriodo,
+    ctr: impPeriodo && cliPeriodo !== null ? (cliPeriodo / impPeriodo) * 100 : null,
+    cpc: cliPeriodo ? investidoPeriodo / cliPeriodo : null,
+    impressoesVisiveis: visiveis,
+    taxaVisibilidade: visiveis !== null && mensuraveis ? (visiveis / mensuraveis) * 100 : null,
+    cpmAlcance: alcanceUnico?.usuarios ? investidoPeriodo / (alcanceUnico.usuarios / 1000) : null,
+  };
+
+  const datasContrato = intervaloDatas(inicioRitmo, p.data_fim);
+  let acumulado = 0;
+  const ritmoSerie = datasContrato.map((data, i) => {
+    const esperadoDia = Math.round((meta * (i + 1)) / datasContrato.length);
+    if (data > hoje || !doKpi.some((c) => c.diario)) return { data, acumulado: null, esperado: esperadoDia };
+    acumulado += doKpi.reduce(
+      (a, c) => a + (c.diario?.dias.find((d) => d.data === data)?.[kpiPrincipal === "CPM" ? "impressoes" : "cliques"] ?? 0),
+      0,
+    );
+    return { data, acumulado, esperado: esperadoDia };
   });
 
   const atualizadoEm = instantes.sort()[0];
@@ -530,10 +448,16 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
       diasPassados: pacing.diasPassados,
       diasRestantes: pacing.diasRestantes,
       brutoPorDiaNecessario: deCentavos(pacing.restantePorDiaCent),
+      cpmRealizado:
+        kpiPrincipal === "CPM" && entregueTotalKpi
+          ? custoPorResultado(deCentavos(doKpi.reduce((a, c) => a + c.investidoCent, 0)), entregueTotalKpi, "CPM")
+          : null,
+      cpmContratado: kpiPrincipal === "CPM" ? custoPorResultado(deCentavos(valorKpiCent), meta, "CPM") : null,
     },
+    complementares,
     serie,
+    ritmo: ritmoSerie,
     publico: { genero: genero.map(semCent), idade: idade.map(semCent) },
-    pracas: { linhas: pracasVisiveis.map(semCent), resumo: resumoGeo },
     criativos,
   };
 
@@ -549,25 +473,21 @@ export async function carregarDashboard(filtro: { de?: string; ate?: string } = 
   const erros = rodarChecklist(paraChecklist, piCent, payload);
   const somaCent = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
   const somaSerie = somaCent(serie.map((d) => paraCentavos(d.investido ?? 0)));
-  if (somaSerie !== periodoCent) erros.push(`[1] série do intervalo (${somaSerie}) ≠ investido do intervalo (${periodoCent})`);
+  if (somaSerie !== periodoCent) erros.push(`[1] série diária (${somaSerie}) ≠ investido (${periodoCent})`);
   const fechamentos: [string, number, number][] = [
     ["criativos", somaCent([...accCriativos.values()].map((a) => a.cent)), esperado.criativos],
     ["gênero", somaCent(genero.map((l) => l.cent)), esperado.genero],
     ["idade", somaCent(idade.map((l) => l.cent)), esperado.idade],
-    // fechamento sobre a lista completa (inclui "Demais localidades" mesmo se oculta na tela)
-    ["praças", somaCent(pracasCompletas.map((l) => l.cent)), esperado.cidades],
   ];
   for (const [nome, soma, esp] of fechamentos)
-    if (soma !== esp) erros.push(`[1] recorte ${nome}: soma (${soma}) ≠ investido do intervalo (${esp})`);
-  if (diffDias(periodo.de, periodo.ate) < 0) erros.push("intervalo inválido");
+    if (soma !== esp) erros.push(`[1] recorte ${nome}: soma (${soma}) ≠ investido (${esp})`);
 
   if (erros.length) {
     for (const e of erros) logServidor("error", `checklist falhou: ${e}`);
-    return fallback(chaveFiltro, "Os números estão sendo validados. Tente novamente em instantes.");
+    return fallback("Os números estão sendo validados. Tente novamente em instantes.");
   }
 
-  ultimosValidos.set(chaveFiltro, payload);
-  if (ultimosValidos.size > 50) ultimosValidos.delete(ultimosValidos.keys().next().value!);
+  ultimoValido = payload;
   return { estado: "ok", payload, aviso: null };
 }
 
@@ -580,6 +500,5 @@ export function totaisRecortes(p: DashboardPayload) {
     criativos: c(p.criativos),
     genero: c(p.publico.genero),
     idade: c(p.publico.idade),
-    pracas: c(p.pracas.linhas),
   };
 }

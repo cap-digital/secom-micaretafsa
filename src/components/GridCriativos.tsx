@@ -3,17 +3,18 @@ import { fmtBRL, fmtCompacto, fmtInt, fmtPct } from "@/lib/formato";
 import { CriativoImagem } from "./CriativoImagem";
 
 function Metricas({ c, grande = false }: { c: CriativoPayload; grande?: boolean }) {
+  // 6 colunas: 1ª linha com 3 métricas de entrega, 2ª com as 2 de dinheiro (mais largas)
   const itens = [
-    { r: "Impressões", v: grande ? fmtInt(c.impressoes) : fmtCompacto(c.impressoes) },
-    { r: "Cliques", v: fmtInt(c.cliques) },
-    { r: "CTR", v: fmtPct(c.ctr, 2) },
-    { r: "Investido", v: fmtBRL(c.investido) },
-    { r: "CPM bruto", v: fmtBRL(c.cpm) },
+    { r: "Impressões", v: grande ? fmtInt(c.impressoes) : fmtCompacto(c.impressoes), span: "col-span-2" },
+    { r: "Cliques", v: fmtInt(c.cliques), span: "col-span-2" },
+    { r: "CTR", v: fmtPct(c.ctr, 2), span: "col-span-2" },
+    { r: "Investido", v: fmtBRL(c.investido), span: "col-span-3" },
+    { r: "CPM bruto", v: fmtBRL(c.cpm), span: "col-span-3" },
   ];
   return (
-    <dl className={`grid gap-x-3 gap-y-1 ${grande ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-3"}`}>
+    <dl className="grid grid-cols-6 gap-x-3 gap-y-1">
       {itens.map((i) => (
-        <div key={i.r} className="min-w-0">
+        <div key={i.r} className={`min-w-0 ${i.span}`}>
           <dt className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-texto-3">{i.r}</dt>
           <dd className={`num truncate font-semibold text-preto ${grande ? "text-base" : "text-sm"}`}>{i.v}</dd>
         </div>

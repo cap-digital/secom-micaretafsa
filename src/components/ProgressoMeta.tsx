@@ -72,11 +72,11 @@ export function ProgressoMeta({ progresso, kpi = "CPM" }: { progresso: Dashboard
   return (
     <section className="listras relative flex h-full flex-col overflow-hidden rounded-2xl border-2 border-preto p-5 text-white shadow-[5px_5px_0_var(--preto)]">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-roxo/40 via-roxo/75 to-roxo-escuro/95" />
-      <div className="relative flex h-full flex-col gap-4">
+      <div className="relative flex h-full flex-col justify-between gap-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85">Progresso da meta</p>
-            <h2 className="titulo-display mt-1 text-[2.6rem] text-white">
+            <h2 className="titulo-display mt-1 whitespace-nowrap text-[2.1rem] text-white sm:text-[2.6rem]">
               <span className="num">{fmtCompacto(p.entregue)}</span>
               <span className="text-xl text-white/80"> / {fmtCompacto(p.meta)}</span>
             </h2>
@@ -111,7 +111,12 @@ export function ProgressoMeta({ progresso, kpi = "CPM" }: { progresso: Dashboard
           cor="bg-laranja"
         />
 
-        <div className="mt-auto grid grid-cols-3 gap-2">
+        <p className="flex items-center gap-1.5 text-[11px] text-white/80">
+          <span aria-hidden className="inline-block h-2 w-2 rotate-45 bg-white" /> marcador branco = ideal até hoje (ritmo linear do
+          período)
+        </p>
+
+        <div className="grid grid-cols-3 gap-2">
           <div className="rounded-lg bg-white/95 px-3 py-2 text-preto">
             <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-texto-2">Dias restantes</p>
             <p className="titulo-display num text-2xl">{p.diasRestantes}</p>

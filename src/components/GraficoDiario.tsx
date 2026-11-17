@@ -70,11 +70,13 @@ export function GraficoDiario({ serie }: { serie: DiaSerie[] }) {
   }));
   const futuros = dados.filter((d) => d.futuro);
   const area = futuros.length ? { x1: futuros[0].dia, x2: futuros[futuros.length - 1].dia } : null;
-  const margem = { top: 6, right: 8, bottom: 0, left: 0 };
+  const margem = { top: 6, right: 18, bottom: 0, left: 0 };
 
+  // eixo em "band" nos dois painéis: barras, pontos e a área futura ficam alinhados
   const eixoX = (mostrar: boolean) => (
     <XAxis
       dataKey="dia"
+      scale="band"
       tick={mostrar ? { fill: EIXO, fontSize: 11 } : false}
       tickLine={false}
       axisLine={{ stroke: GRADE }}
